@@ -581,4 +581,180 @@ defmodule Parselet.ComponentTest do
       assert result.earnings == 5603.00
     end
   end
+
+  describe "multi-components parsing" do
+    defmodule PersonalInfoComponent do
+      use Parselet.Component
+
+      field :name, pattern: ~r/Name:\s*(.+)/
+      field :age, pattern: ~r/Age:\s*(\d+)/, transform: &String.to_integer/1
+      field :email, pattern: ~r/Email:\s*(\S+@\S+)/
+    end
+
+    defmodule AddressComponent do
+      use Parselet.Component
+
+      field :street, pattern: ~r/Street:\s*(.+)/
+      field :city, pattern: ~r/City:\s*(.+)/
+      field :zip_code, pattern: ~r/ZIP:\s*(\d{5})/
+    end
+
+    defmodule EmploymentComponent do
+      use Parselet.Component
+
+      field :company, pattern: ~r/Company:\s*(.+)/
+      field :position, pattern: ~r/Position:\s*(.+)/
+      field :salary, pattern: ~r/Salary:\s*\$([\d,]+(?:\.\d{2})?)/, transform: fn(amount) ->
+        amount |> String.replace(",", "") |> String.to_float()
+      end
+    end
+
+    test "parses text using multiple components" do
+      text = """
+      Name: John Doe
+      Age: 35
+      Email: john.doe@example.com
+
+      Street: 123 Main St
+      City: Anytown
+      ZIP: 12345
+
+      Company: Tech Corp
+      Position: Senior Developer
+      Salary: $85,000.00
+      """
+
+      result = Parselet.parse(text, components: [PersonalInfoComponent, AddressComponent, EmploymentComponent])
+
+      # Personal info fields
+      assert result.name == "John Doe"
+      assert result.age == 35
+      assert result.email == "john.doe@example.com"
+
+      # Address fields
+      assert result.street == "123 Main St"
+      assert result.city == "Anytown"
+      assert result.zip_code == "12345"
+
+      # Employment fields
+      assert result.company == "Tech Corp"
+      assert result.position == "Senior Developer"
+      assert result.salary == 85000.0
+    end
+
+    test "handles overlapping field names across components" do
+      defmodule OverlapComponentA do
+        use Parselet.Component
+        field :value, pattern: ~r/Value A:\s*(.+)/
+      end
+
+      defmodule OverlapComponentB do
+        use Parselet.Component
+        field :value, pattern: ~r/Value B:\s*(.+)/
+      end
+
+      text = "Value A: First\nValue B: Second"
+      result = Parselet.parse(text, components: [OverlapComponentA, OverlapComponentB])
+
+      # Last component wins for overlapping field names
+      assert result.value == "Second"
+    end
+
+    test "combines fields from multiple components with required validation" do
+      defmodule MultiRequiredComponent do
+        use Parselet.Component
+        field :required_field, pattern: ~r/Required:\s*(.+)/, required: true
+      end
+
+      defmodule MultiOptionalComponent do
+        use Parselet.Component
+        field :optional_field, pattern: ~r/Optional:\s*(.+)/
+      end
+
+      text = "Required: Important Data\nOptional: Extra Info"
+      result = Parselet.parse!(text, components: [MultiRequiredComponent, MultiOptionalComponent])
+
+      assert result.required_field == "Important Data"
+      assert result.optional_field == "Extra Info"
+    end
+
+    test "fails when required field in any component is missing" do
+      defmodule MultiStrictComponent do
+        use Parselet.Component
+        field :must_have, pattern: ~r/Must Have:\s*(.+)/, required: true
+      end
+
+      defmodule MultiLenientComponent do
+        use Parselet.Component
+        field :nice_to_have, pattern: ~r/Nice To Have:\s*(.+)/
+      end
+
+      text = "Nice To Have: Bonus Data"
+      # This should raise because MultiStrictComponent's required field is missing
+      assert_raise ArgumentError, "Missing required fields: [:must_have]", fn ->
+        Parselet.parse!(text, components: [MultiStrictComponent, MultiLenientComponent])
+      end
+    end
+
+    test "returns nested results when merge: false" do
+      text = """
+      Name: John Doe
+      Age: 35
+      Email: john.doe@example.com
+
+      Street: 123 Main St
+      City: Anytown
+      """
+
+      result = Parselet.parse(text, components: [PersonalInfoComponent, AddressComponent], merge: false)
+
+      assert is_map(result)
+      assert Map.has_key?(result, PersonalInfoComponent)
+      assert Map.has_key?(result, AddressComponent)
+
+      personal_info = result[PersonalInfoComponent]
+      assert personal_info.name == "John Doe"
+      assert personal_info.age == 35
+      assert personal_info.email == "john.doe@example.com"
+
+      address_info = result[AddressComponent]
+      assert address_info.street == "123 Main St"
+      assert address_info.city == "Anytown"
+      refute Map.has_key?(address_info, :zip_code)
+    end
+
+    test "merge: true is default behavior" do
+      defmodule DefaultMergeComponent do
+        use Parselet.Component
+        field :name, pattern: ~r/Name:\s*(.+)/
+        field :age, pattern: ~r/Age:\s*(\d+)/, transform: &String.to_integer/1
+      end
+
+      text = "Name: Alice\nAge: 30"
+      merged_result = Parselet.parse(text, components: [DefaultMergeComponent])
+      explicit_merged_result = Parselet.parse(text, components: [DefaultMergeComponent], merge: true)
+
+      assert merged_result == explicit_merged_result
+      assert merged_result.name == "Alice"
+      assert merged_result.age == 30
+    end
+
+    test "validates required fields in nested results" do
+      defmodule NestedRequiredComponent do
+        use Parselet.Component
+        field :required_data, pattern: ~r/Required:\s*(.+)/, required: true
+      end
+
+      defmodule NestedOptionalComponent do
+        use Parselet.Component
+        field :optional_data, pattern: ~r/Optional:\s*(.+)/
+      end
+
+      text = "Optional: Some data"
+
+      assert_raise ArgumentError, "Missing required fields: [:required_data]", fn ->
+        Parselet.parse!(text, components: [NestedRequiredComponent, NestedOptionalComponent], merge: false)
+      end
+    end
+  end
 end

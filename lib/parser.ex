@@ -10,11 +10,16 @@ defmodule Parselet do
 
     * `text` - The text content to parse
     * `components` - A list of component modules that define the fields to extract
+    * `merge` - Whether to merge all component fields into a single map (default: `true`).
+      When `false`, returns a map with component names as keys and their extracted fields as values.
 
   ## Returns
 
-  A map containing the extracted field values. Only fields that successfully match
-  their patterns will be included in the result. Fields with `nil` values are excluded.
+  When `merge: true` (default), a map containing all extracted field values merged together.
+  Only fields that successfully match their patterns will be included. Fields with `nil` values are excluded.
+
+  When `merge: false`, a map where each key is a component module and each value is a map
+  of that component's extracted fields.
 
   ## Examples
 
@@ -26,11 +31,19 @@ defmodule Parselet do
       end
 
       text = "Name: Alice\\nAge: 30"
+
+      # Merged result (default behavior)
       result = Parselet.parse(text, components: [MyComponent])
       # => %{name: "Alice", age: 30}
+
+      # Nested result
+      result = Parselet.parse(text, components: [MyComponent], merge: false)
+      # => %{MyComponent => %{name: "Alice", age: 30}}
   """
-  def parse(text, components: components) do
-    parse_impl(text, components)
+  def parse(text, opts) do
+    components = Keyword.fetch!(opts, :components)
+    merge = Keyword.get(opts, :merge, true)
+    parse_impl(text, components, merge)
   end
 
   @doc """
@@ -44,11 +57,12 @@ defmodule Parselet do
 
     * `text` - The text content to parse
     * `components` - A list of component modules that define the fields to extract
+    * `merge` - Whether to merge all component fields into a single map (default: `true`)
 
   ## Returns
 
-  A map containing the extracted field values, or raises `ArgumentError` if required
-  fields are missing.
+  A map containing the extracted field values (merged or nested based on `merge` option),
+  or raises `ArgumentError` if required fields are missing.
 
   ## Examples
 
@@ -69,8 +83,10 @@ defmodule Parselet do
       Parselet.parse!(incomplete, components: [InvoiceComponent])
       # ** (ArgumentError) Missing required fields: [:invoice_id]
   """
-  def parse!(text, components: components) do
-    result = parse_impl(text, components)
+  def parse!(text, opts) do
+    components = Keyword.fetch!(opts, :components)
+    merge = Keyword.get(opts, :merge, true)
+    result = parse_impl(text, components, merge)
 
     all_fields =
       components
@@ -79,13 +95,13 @@ defmodule Parselet do
       end)
       |> Enum.into(%{})
 
-    case Parselet.Field.validate_required(result, all_fields) do
+    case Parselet.Field.validate_required(result, all_fields, merge) do
       [] -> result
       missing -> raise ArgumentError, "Missing required fields: #{inspect(missing)}"
     end
   end
 
-  defp parse_impl(text, components) do
+  defp parse_impl(text, components, true) do
     components
     |> Enum.flat_map(fn component ->
       component.__parselet_fields__()
@@ -94,6 +110,21 @@ defmodule Parselet do
       end)
     end)
     |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+    |> Enum.into(%{})
+  end
+
+  defp parse_impl(text, components, false) do
+    components
+    |> Enum.map(fn component ->
+      fields = component.__parselet_fields__()
+      |> Enum.map(fn {name, field} ->
+        {name, Parselet.Field.extract(field, text)}
+      end)
+      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+      |> Enum.into(%{})
+
+      {component, fields}
+    end)
     |> Enum.into(%{})
   end
 end

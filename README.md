@@ -238,6 +238,149 @@ result = Parselet.parse(email, components: [MyApp.Parselet.Components.AirbnbRese
 # }
 ```
 
+## Multi-Component Example: Invoice Processing
+
+Parselet shines when you need to extract data from complex documents that contain multiple types of information. Here's an example of processing an invoice that contains both header information and line items:
+
+```elixir
+defmodule MyApp.Parselet.Components.InvoiceHeader do
+  use Parselet.Component
+
+  field :invoice_number,
+    pattern: ~r/Invoice\s*#?\s*([A-Z0-9\-]+)/i,
+    capture: :first,
+    required: true
+
+  field :invoice_date,
+    pattern: ~r/Date:\s*([^\n]+)/i,
+    capture: :first,
+    transform: &parse_date/1
+
+  field :customer_name,
+    pattern: ~r/Customer:\s*([^\n]+)/i,
+    capture: :first,
+    transform: &String.trim/1
+
+  field :total_amount,
+    pattern: ~r/Total:\s*\$?([\d,]+\.\d{2})/i,
+    capture: :first,
+    transform: fn amt ->
+      amt
+      |> String.replace(",", "")
+      |> String.to_float()
+    end,
+    required: true
+
+  defp parse_date(date_string) do
+    # Simple date parsing - in real code you'd use a proper date library
+    case Regex.run(~r/(\d{4})-(\d{2})-(\d{2})/, date_string) do
+      [_, year, month, day] ->
+        Date.from_iso8601!("#{year}-#{month}-#{day}")
+      _ ->
+        date_string  # Return as string if parsing fails
+    end
+  end
+end
+
+defmodule MyApp.Parselet.Components.InvoiceItems do
+  use Parselet.Component
+
+  field :line_items,
+    function: fn text ->
+      # Extract all line items from the invoice
+      text
+      |> String.split("\n")
+      |> Enum.map(&String.trim/1)
+      |> Enum.filter(&String.match?(&1, ~r/^\d+\.\s+.+\s+\$\d/))
+      |> Enum.map(&parse_line_item/1)
+    end
+
+  field :item_count,
+    function: fn text ->
+      # Count the number of line items
+      text
+      |> String.split("\n")
+      |> Enum.count(&String.match?(&1, ~r/^\d+\.\s+.+\s+\$\d/))
+    end
+
+  field :subtotal,
+    pattern: ~r/Subtotal:\s*\$?([\d,]+\.\d{2})/i,
+    capture: :first,
+    transform: fn amt ->
+      amt
+      |> String.replace(",", "")
+      |> String.to_float()
+    end
+
+  field :tax_amount,
+    pattern: ~r/Tax:\s*\$?([\d,]+\.\d{2})/i,
+    capture: :first,
+    transform: fn amt ->
+      amt
+      |> String.replace(",", "")
+      |> String.to_float()
+    end
+
+  defp parse_line_item(line) do
+    case Regex.run(~r/^(\d+)\.\s+(.+?)\s+\$([\d,]+\.\d{2})$/, line) do
+      [_, quantity, description, price] ->
+        %{
+          quantity: String.to_integer(quantity),
+          description: String.trim(description),
+          unit_price: price |> String.replace(",", "") |> String.to_float()
+        }
+      _ ->
+        nil
+    end
+  end
+end
+
+# Usage - parse with both components
+invoice_text = """
+INVOICE #INV-2026-001
+Date: 2026-03-27
+Customer: Acme Corporation
+
+Line Items:
+1. Office Chair    $299.99
+2. Desk Lamp       $89.50
+3. Keyboard        $129.99
+
+Subtotal: $519.48
+Tax: $41.56
+Total: $561.04
+"""
+
+result = Parselet.parse(invoice_text, components: [
+  MyApp.Parselet.Components.InvoiceHeader,
+  MyApp.Parselet.Components.InvoiceItems
+])
+
+# Result combines fields from both components:
+# %{
+#   invoice_number: "INV-2026-001",
+#   invoice_date: ~D[2026-03-27],
+#   customer_name: "Acme Corporation",
+#   total_amount: 561.04,
+#   line_items: [
+#     %{quantity: 1, description: "Office Chair", unit_price: 299.99},
+#     %{quantity: 2, description: "Desk Lamp", unit_price: 89.50},
+#     %{quantity: 3, description: "Keyboard", unit_price: 129.99}
+#   ],
+#   item_count: 3,
+#   subtotal: 519.48,
+#   tax_amount: 41.56
+# }
+```
+
+This example demonstrates:
+
+- **Component Separation**: Header info and line items are logically separated into different components
+- **Complex Extraction**: Using custom functions for parsing structured line items
+- **Data Transformation**: Converting strings to dates, numbers, and structured data
+- **Field Combination**: All fields from both components are merged into a single result map
+- **Required Fields**: Ensuring critical fields like invoice number and total are present
+
 ## Best Practices
 
 ### 1. Use Specific Patterns

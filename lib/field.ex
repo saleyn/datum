@@ -86,17 +86,34 @@ defmodule Parselet.Field do
 
   ## Parameters
 
-    * `fields_map` - Map of extracted field values
+    * `fields_map` - Map of extracted field values (merged or nested based on merge option)
     * `fields_struct_map` - Map of field name to Field struct
+    * `merge` - Whether the fields_map is merged (true) or nested (false)
 
   ## Returns
 
   List of required field names that are missing from the extracted data.
   """
-  def validate_required(fields_map, fields_struct_map) do
+  def validate_required(fields_map, fields_struct_map, true) do
     fields_struct_map
     |> Enum.filter(fn {_name, field} -> field.required end)
     |> Enum.map(fn {name, _field} -> name end)
     |> Enum.filter(&(!Map.has_key?(fields_map, &1)))
+  end
+
+  def validate_required(fields_map, fields_struct_map, false) do
+    # For nested results, we need to check required fields within each component
+    fields_struct_map
+    |> Enum.filter(fn {_name, field} -> field.required end)
+    |> Enum.map(fn {name, _field} -> name end)
+    |> Enum.filter(fn field_name ->
+      # Check if this field exists in any of the component results
+      not Enum.any?(Map.values(fields_map), &Map.has_key?(&1, field_name))
+    end)
+  end
+
+  # Backward compatibility
+  def validate_required(fields_map, fields_struct_map) do
+    validate_required(fields_map, fields_struct_map, true)
   end
 end

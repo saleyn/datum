@@ -1,18 +1,18 @@
-# Datum API Documentation
+# Parselet API Documentation
 
 ## Overview
 
-Datum is a declarative text parsing library that extracts structured data from unstructured text. The library provides three main modules:
+Parselet is a declarative text parsing library that extracts structured data from unstructured text. The library provides three main modules:
 
-1. **`Datum`** - Entry point for parsing operations
-2. **`Datum.Component`** - DSL for defining extraction components
-3. **`Datum.Field`** - Field extraction and transformation logic
+1. **`Parselet`** - Entry point for parsing operations
+2. **`Parselet.Component`** - DSL for defining extraction components
+3. **`Parselet.Field`** - Field extraction and transformation logic
 
 ---
 
-## Module: `Datum`
+## Module: `Parselet`
 
-Main entry point for parsing text using Datum components.
+Main entry point for parsing text using Parselet components.
 
 ### Functions
 
@@ -27,13 +27,13 @@ Extracts data from text using the specified components.
 
 **Parameters:**
 - `text` (`String.t`) - The text to parse
-- `components: [module]` - List of component modules (created with `use Datum.Component`)
+- `components: [module]` - List of component modules (created with `use Parselet.Component`)
 
 **Returns:** `map()` - Map containing extracted fields
 
 **Behavior:**
 - Iterates through all components and their defined fields
-- Calls `Datum.Field.extract/2` for each field
+- Calls `Parselet.Field.extract/2` for each field
 - Filters out fields that didn't match (nil values)
 - Returns a map combining results from all components
 
@@ -41,23 +41,23 @@ Extracts data from text using the specified components.
 
 ```elixir
 defmodule MyParser do
-  use Datum.Component
+  use Parselet.Component
   
   field :name, pattern: ~r/Name:\s*(.+)/
   field :email, pattern: ~r/Email:\s*(.+)/
 end
 
 text = "Name: Alice\nEmail: alice@example.com"
-result = Datum.parse(text, components: [MyParser])
+result = Parselet.parse(text, components: [MyParser])
 # => %{name: "Alice", email: "alice@example.com"}
 ```
 
 **Multiple Components:**
 
 ```elixir
-result = Datum.parse(text, components: [
-  MyApp.Datum.Parser1,
-  MyApp.Datum.Parser2
+result = Parselet.parse(text, components: [
+  MyApp.Parselet.Parser1,
+  MyApp.Parselet.Parser2
 ])
 # Fields from both components are merged
 ```
@@ -83,7 +83,7 @@ Extracts data from text with validation of required fields.
 
 ```elixir
 defmodule MyParser do
-  use Datum.Component
+  use Parselet.Component
   
   field :name, pattern: ~r/Name:\s*(.+)/, required: true
   field :email, pattern: ~r/Email:\s*(.+)/
@@ -92,18 +92,18 @@ end
 text = "Name: Alice"
 
 # This will raise because :name is present but :email would be optional
-result = Datum.parse!(text, components: [MyParser])
+result = Parselet.parse!(text, components: [MyParser])
 # => %{name: "Alice"}
 
 # If we try with missing required field:
 text = "Email: alice@example.com"
-Datum.parse!(text, components: [MyParser])
+Parselet.parse!(text, components: [MyParser])
 # => raises ArgumentError: Missing required fields: [:name]
 ```
 
 ---
 
-## Module: `Datum.Component`
+## Module: `Parselet.Component`
 
 DSL for defining text extraction components.
 
@@ -182,13 +182,13 @@ field :account_id,
 
 **Behavior:**
 - Compile-time macro that registers field definitions
-- Fields are stored in `@datum_fields` attribute
-- At module compilation, `__before_compile__/1` generates `__datum_fields__/0` function
-- This function returns a map of field name → `Datum.Field` struct
+- Fields are stored in `@parselet_fields` attribute
+- At module compilation, `__before_compile__/1` generates `__parselet_fields__/0` function
+- This function returns a map of field name → `Parselet.Field` struct
 
 ---
 
-## Module: `Datum.Field`
+## Module: `Parselet.Field`
 
 Handles field extraction and value transformation.
 
@@ -220,12 +220,12 @@ Creates a new Field struct from options.
 - `name` (atom) - Field name
 - `opts` (keyword list) - Field options (pattern, capture, transform, function)
 
-**Returns:** `%Datum.Field{}` - Field struct
+**Returns:** `%Parselet.Field{}` - Field struct
 
 **Example:**
 
 ```elixir
-field = Datum.Field.new(:email, pattern: ~r/Email:\s*(\S+)/, capture: :first)
+field = Parselet.Field.new(:email, pattern: ~r/Email:\s*(\S+)/, capture: :first)
 ```
 
 #### `extract(field, text)`
@@ -238,7 +238,7 @@ Extracts data from text using the field definition.
 ```
 
 **Parameters:**
-- `field` (`Datum.Field.t`) - Field struct with extraction rules
+- `field` (`Parselet.Field.t`) - Field struct with extraction rules
 - `text` (`String.t`) - Text to extract from
 
 **Returns:** Extracted and transformed value, or `nil` if not found
@@ -254,7 +254,7 @@ Validates that all required fields are present in the result.
 
 **Parameters:**
 - `result_map` (`map`) - Parsed result from extraction
-- `fields_struct_map` (`map`) - Map of field_name → `Datum.Field` struct
+- `fields_struct_map` (`map`) - Map of field_name → `Parselet.Field` struct
 
 **Returns:** List of missing required field names (empty list if all required fields present)
 
@@ -262,13 +262,13 @@ Validates that all required fields are present in the result.
 
 ```elixir
 # Get all fields from a component
-fields = MyComponent.__datum_fields__()
+fields = MyComponent.__parselet_fields__()
 
 # Parse text
-result = Datum.Field.extract(field, text)
+result = Parselet.Field.extract(field, text)
 
 # Check for missing required fields
-missing = Datum.Field.validate_required(result, fields)
+missing = Parselet.Field.validate_required(result, fields)
 
 case missing do
   [] -> {:ok, result}
@@ -306,29 +306,29 @@ end
 
 ```elixir
 # Pattern extraction with first capture
-field = Datum.Field.new(:name, pattern: ~r/Name:\s*(.+)/, capture: :first)
-result = Datum.Field.extract(field, "Name: Alice")
+field = Parselet.Field.new(:name, pattern: ~r/Name:\s*(.+)/, capture: :first)
+result = Parselet.Field.extract(field, "Name: Alice")
 # => "Alice"
 
 # Multiple captures
-field = Datum.Field.new(:date, 
+field = Parselet.Field.new(:date, 
   pattern: ~r/(\d{4})-(\d{2})-(\d{2})/,
   capture: :all,
   transform: fn [y, m, d] -> "#{y}/#{m}/#{d}" end
 )
-result = Datum.Field.extract(field, "Date: 2026-03-27")
+result = Parselet.Field.extract(field, "Date: 2026-03-27")
 # => "2026/03/27"
 
 # Custom function
-field = Datum.Field.new(:lines, 
+field = Parselet.Field.new(:lines, 
   function: fn text -> String.split(text, "\n") end
 )
-result = Datum.Field.extract(field, "line1\nline2")
+result = Parselet.Field.extract(field, "line1\nline2")
 # => ["line1", "line2"]
 
 # No match returns nil
-field = Datum.Field.new(:missing, pattern: ~r/NotFound:\s*(.+)/)
-result = Datum.Field.extract(field, "Some text")
+field = Parselet.Field.new(:missing, pattern: ~r/NotFound:\s*(.+)/)
+result = Parselet.Field.extract(field, "Some text")
 # => nil
 ```
 
@@ -336,27 +336,27 @@ result = Datum.Field.extract(field, "Some text")
 
 ## Component Structure
 
-When you use `Datum.Component`, your module gets:
+When you use `Parselet.Component`, your module gets:
 
-1. **`@datum_fields` attribute** - Accumulates field definitions during compilation
-2. **`__datum_fields__/0` function** - Generated automatically, returns map of fields
+1. **`@parselet_fields` attribute** - Accumulates field definitions during compilation
+2. **`__parselet_fields__/0` function** - Generated automatically, returns map of fields
 3. **`field/2` macro** - DSL for defining fields
 
 **Generated code example:**
 
 ```elixir
 defmodule MyParser do
-  use Datum.Component
+  use Parselet.Component
 
   field :name, pattern: ~r/Name:\s*(.+)/
   field :email, pattern: ~r/Email:\s*(.+)/
 end
 
 # Generates:
-# def __datum_fields__() do
+# def __parselet_fields__() do
 #   %{
-#     name: %Datum.Field{name: :name, pattern: ~r/Name:\s*(.+)/, ...},
-#     email: %Datum.Field{name: :email, pattern: ~r/Email:\s*(.+)/, ...}
+#     name: %Parselet.Field{name: :name, pattern: ~r/Name:\s*(.+)/, ...},
+#     email: %Parselet.Field{name: :email, pattern: ~r/Email:\s*(.+)/, ...}
 #   }
 # end
 ```
@@ -366,11 +366,11 @@ end
 ## Data Flow Diagram
 
 ```
-Datum.parse(text, components: [MyComponent])
+Parselet.parse(text, components: [MyComponent])
     ↓
 For each component:
-  For each field in __datum_fields__:
-    Datum.Field.extract(field, text)
+  For each field in __parselet_fields__:
+    Parselet.Field.extract(field, text)
       ↓
     Check if :function is defined
       ↓ Yes: Call function(text), return result
@@ -393,11 +393,11 @@ Return as map: %{field_name: value, ...}
 
 ## Error Handling
 
-Datum uses Elixir's pattern matching and optional field extraction:
+Parselet uses Elixir's pattern matching and optional field extraction:
 
 ```elixir
 # Fields that don't match simply won't appear in the result
-result = Datum.parse(text, components: [MyComponent])
+result = Parselet.parse(text, components: [MyComponent])
 
 # Safe access with Map.get/3
 name = Map.get(result, :name, "Unknown")
@@ -440,7 +440,7 @@ field :optional_email,
   capture: :first
 
 # In usage:
-result = Datum.parse(text, components: [MyComponent])
+result = Parselet.parse(text, components: [MyComponent])
 email = Map.get(result, :optional_email)  # nil if not found
 ```
 
@@ -490,15 +490,15 @@ field :formatted_date,
 
 ## Type Specifications
 
-While Datum doesn't use explicit @spec annotations in the current version, here are the expected types:
+While Parselet doesn't use explicit @spec annotations in the current version, here are the expected types:
 
 ```elixir
-# Datum module
+# Parselet module
 @spec parse(String.t(), components: [module()]) :: map()
 
-# Datum.Field module  
-@spec new(atom(), keyword()) :: %Datum.Field{}
-@spec extract(%Datum.Field{}, String.t()) :: any() | nil
+# Parselet.Field module  
+@spec new(atom(), keyword()) :: %Parselet.Field{}
+@spec extract(%Parselet.Field{}, String.t()) :: any() | nil
 
 # Transform function signature
 @type transform_fn :: (any() -> any())

@@ -1,6 +1,6 @@
-defmodule Datum do
+defmodule Parselet do
   @moduledoc """
-  Main entry point for parsing text using Datum components.
+  Main entry point for parsing text using Parselet components.
   """
 
   @doc """
@@ -19,14 +19,14 @@ defmodule Datum do
   ## Examples
 
       defmodule MyComponent do
-        use Datum.Component
+        use Parselet.Component
 
         field :name, pattern: ~r/Name: (.+)/
         field :age, pattern: ~r/Age: (\\d+)/, transform: &String.to_integer/1
       end
 
       text = "Name: Alice\\nAge: 30"
-      result = Datum.parse(text, components: [MyComponent])
+      result = Parselet.parse(text, components: [MyComponent])
       # => %{name: "Alice", age: 30}
   """
   def parse(text, components: components) do
@@ -53,7 +53,7 @@ defmodule Datum do
   ## Examples
 
       defmodule InvoiceComponent do
-        use Datum.Component
+        use Parselet.Component
 
         field :invoice_id, pattern: ~r/Invoice #(\\d+)/, required: true
         field :amount, pattern: ~r/Total: \\$([\\d.]+)/, transform: &String.to_float/1
@@ -61,12 +61,12 @@ defmodule Datum do
 
       # This will succeed
       text = "Invoice #123\\nTotal: $500.00"
-      result = Datum.parse!(text, components: [InvoiceComponent])
+      result = Parselet.parse!(text, components: [InvoiceComponent])
       # => %{invoice_id: "123", amount: 500.0}
 
       # This will raise ArgumentError
       incomplete = "Total: $500.00"
-      Datum.parse!(incomplete, components: [InvoiceComponent])
+      Parselet.parse!(incomplete, components: [InvoiceComponent])
       # ** (ArgumentError) Missing required fields: [:invoice_id]
   """
   def parse!(text, components: components) do
@@ -75,11 +75,11 @@ defmodule Datum do
     all_fields =
       components
       |> Enum.flat_map(fn component ->
-        component.__datum_fields__()
+        component.__parselet_fields__()
       end)
       |> Enum.into(%{})
 
-    case Datum.Field.validate_required(result, all_fields) do
+    case Parselet.Field.validate_required(result, all_fields) do
       [] -> result
       missing -> raise ArgumentError, "Missing required fields: #{inspect(missing)}"
     end
@@ -88,9 +88,9 @@ defmodule Datum do
   defp parse_impl(text, components) do
     components
     |> Enum.flat_map(fn component ->
-      component.__datum_fields__()
+      component.__parselet_fields__()
       |> Enum.map(fn {name, field} ->
-        {name, Datum.Field.extract(field, text)}
+        {name, Parselet.Field.extract(field, text)}
       end)
     end)
     |> Enum.reject(fn {_k, v} -> is_nil(v) end)

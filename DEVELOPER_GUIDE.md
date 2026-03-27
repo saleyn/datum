@@ -1,8 +1,8 @@
-# Datum Developer Guide
+# Parselet Developer Guide
 
 ## Introduction
 
-This guide is for developers who want to create custom components using the Datum library. It covers component creation, best practices, and advanced techniques.
+This guide is for developers who want to create custom components using the Parselet library. It covers component creation, best practices, and advanced techniques.
 
 ## Table of Contents
 
@@ -23,8 +23,8 @@ This guide is for developers who want to create custom components using the Datu
 ### Basic Component Structure
 
 ```elixir
-defmodule MyApp.Datum.Components.SimpleParser do
-  use Datum.Component
+defmodule MyApp.Parselet.Components.SimpleParser do
+  use Parselet.Component
 
   # Define fields here
   field :name, pattern: ~r/Name:\s*(.+)/
@@ -36,8 +36,8 @@ end
 Let's create a component to parse invoice data:
 
 ```elixir
-defmodule MyApp.Datum.Components.InvoiceParser do
-  use Datum.Component
+defmodule MyApp.Parselet.Components.InvoiceParser do
+  use Parselet.Component
 
   # Invoice number - simple pattern
   field :invoice_number,
@@ -87,7 +87,7 @@ Vendor: Acme Corp
 Total: $1,234.56
 """
 
-result = Datum.parse(invoice_text, components: [MyApp.Datum.Components.InvoiceParser])
+result = Parselet.parse(invoice_text, components: [MyApp.Parselet.Components.InvoiceParser])
 
 # Result:
 # %{
@@ -439,8 +439,8 @@ Mark fields as required to ensure critical data is always present in parsed resu
 ### Basic Usage
 
 ```elixir
-defmodule MyApp.Datum.Components.PaymentParser do
-  use Datum.Component
+defmodule MyApp.Parselet.Components.PaymentParser do
+  use Parselet.Component
 
   # Required fields
   field :transaction_id,
@@ -466,13 +466,13 @@ end
 
 ```elixir
 # Non-strict parsing: returns whatever fields it finds
-result = Datum.parse(text, components: [PaymentParser])
+result = Parselet.parse(text, components: [PaymentParser])
 # => %{transaction_id: "TXN123", amount: 99.99, ...}
 # or
 # => %{description: "Order #456"} (if required fields are missing)
 
 # Strict parsing: raises if required fields missing
-result = Datum.parse!(text, components: [PaymentParser])
+result = Parselet.parse!(text, components: [PaymentParser])
 # => %{transaction_id: "TXN123", amount: 99.99, ...}
 # or
 # => raises ArgumentError if transaction_id or amount missing
@@ -480,31 +480,31 @@ result = Datum.parse!(text, components: [PaymentParser])
 
 ### Difference Between parse/2 and parse!/2
 
-- **`Datum.parse/2`** - Lenient, returns whatever fields match
-- **`Datum.parse!/2`** - Strict, raises `ArgumentError` if any required fields missing
+- **`Parselet.parse/2`** - Lenient, returns whatever fields match
+- **`Parselet.parse!/2`** - Strict, raises `ArgumentError` if any required fields missing
 
 ```elixir
 # If payment data has no amount:
 incomplete_text = "TXN: ABC123"
 
 # Non-strict: succeeds, returns what matched
-result = Datum.parse(incomplete_text, components: [PaymentParser])
+result = Parselet.parse(incomplete_text, components: [PaymentParser])
 # => %{transaction_id: "ABC123"}
 
 # Strict: fails
-Datum.parse!(incomplete_text, components: [PaymentParser])
+Parselet.parse!(incomplete_text, components: [PaymentParser])
 # => raises: ArgumentError, "Missing required fields: [:amount]"
 ```
 
 ### Manual Validation
 
-For custom validation logic, use `Datum.Field.validate_required/2`:
+For custom validation logic, use `Parselet.Field.validate_required/2`:
 
 ```elixir
-fields_map = PaymentParser.__datum_fields__()
-result = Datum.parse(text, components: [PaymentParser])
+fields_map = PaymentParser.__parselet_fields__()
+result = Parselet.parse(text, components: [PaymentParser])
 
-missing = Datum.Field.validate_required(result, fields_map)
+missing = Parselet.Field.validate_required(result, fields_map)
 
 case missing do
   [] ->
@@ -534,7 +534,7 @@ end
    ```elixir
    def process_payment(text) do
      # Strict validation at API boundary
-     Datum.parse!(text, components: [PaymentParser])
+     Parselet.parse!(text, components: [PaymentParser])
    end
    ```
 
@@ -542,7 +542,7 @@ end
    ```elixir
    def update_user(text) do
      # Lenient parsing allows partial updates
-     partial = Datum.parse(text, components: [UserParser])
+     partial = Parselet.parse(text, components: [UserParser])
      update_user_fields(user, partial)
    end
    ```
@@ -556,15 +556,15 @@ end
 Use multiple components for different aspects of the data:
 
 ```elixir
-defmodule MyApp.Datum.Components.Header do
-  use Datum.Component
+defmodule MyApp.Parselet.Components.Header do
+  use Parselet.Component
   
   field :title, pattern: ~r/Title:\s*(.+)/
   field :date, pattern: ~r/Date:\s*(.+)/
 end
 
-defmodule MyApp.Datum.Components.Body do
-  use Datum.Component
+defmodule MyApp.Parselet.Components.Body do
+  use Parselet.Component
   
   field :content, function: fn text ->
     String.split(text, "\n")
@@ -573,9 +573,9 @@ defmodule MyApp.Datum.Components.Body do
 end
 
 # Usage
-result = Datum.parse(text, components: [
-  MyApp.Datum.Components.Header,
-  MyApp.Datum.Components.Body
+result = Parselet.parse(text, components: [
+  MyApp.Parselet.Components.Header,
+  MyApp.Parselet.Components.Body
 ])
 # => Fields from both components merged
 ```
@@ -585,14 +585,14 @@ result = Datum.parse(text, components: [
 Create domain-specific component modules:
 
 ```elixir
-defmodule MyApp.Datum.Parsers do
-  def invoice, do: MyApp.Datum.Components.InvoiceParser
-  def email, do: MyApp.Datum.Components.EmailParser
-  def receipt, do: MyApp.Datum.Components.ReceiptParser
+defmodule MyApp.Parselet.Parsers do
+  def invoice, do: MyApp.Parselet.Components.InvoiceParser
+  def email, do: MyApp.Parselet.Components.EmailParser
+  def receipt, do: MyApp.Parselet.Components.ReceiptParser
 end
 
 # Usage
-result = Datum.parse(text, components: [MyApp.Datum.Parsers.invoice()])
+result = Parselet.parse(text, components: [MyApp.Parselet.Parsers.invoice()])
 ```
 
 ### Composable Field Definitions
@@ -600,7 +600,7 @@ result = Datum.parse(text, components: [MyApp.Datum.Parsers.invoice()])
 Create reusable field helpers:
 
 ```elixir
-defmodule MyApp.Datum.FieldHelpers do
+defmodule MyApp.Parselet.FieldHelpers do
   def email_field(name, opts \\ []) do
     Keyword.merge([
       pattern: ~r/Email:\s*(\S+@\S+)/,
@@ -621,9 +621,9 @@ defmodule MyApp.Datum.FieldHelpers do
 end
 
 # Usage
-defmodule MyApp.Datum.Components.UserParser do
-  use Datum.Component
-  import MyApp.Datum.FieldHelpers
+defmodule MyApp.Parselet.Components.UserParser do
+  use Parselet.Component
+  import MyApp.Parselet.FieldHelpers
 
   field :email, email_field(:email)
   field :birth_date, date_field(:birth_date)
@@ -657,29 +657,29 @@ field :phone,
 ### Unit Tests
 
 ```elixir
-defmodule MyApp.Datum.Components.InvoiceParserTest do
+defmodule MyApp.Parselet.Components.InvoiceParserTest do
   use ExUnit.Case, async: true
 
-  alias MyApp.Datum.Components.InvoiceParser
+  alias MyApp.Parselet.Components.InvoiceParser
 
   describe "invoice parsing" do
     test "extracts invoice number" do
       text = "Invoice #12345"
-      result = Datum.parse(text, components: [InvoiceParser])
+      result = Parselet.parse(text, components: [InvoiceParser])
       
       assert result.invoice_number == "12345"
     end
 
     test "extracts and converts date" do
       text = "Date: 2026-03-27"
-      result = Datum.parse(text, components: [InvoiceParser])
+      result = Parselet.parse(text, components: [InvoiceParser])
       
       assert result.date == ~D[2026-03-27]
     end
 
     test "handles missing optional fields" do
       text = "Invoice #999"
-      result = Datum.parse(text, components: [InvoiceParser])
+      result = Parselet.parse(text, components: [InvoiceParser])
       
       assert Map.has_key?(result, :invoice_number)
       refute Map.has_key?(result, :date)
@@ -691,16 +691,16 @@ end
 ### Property-Based Tests with Generators
 
 ```elixir
-defmodule MyApp.Datum.Components.EmailParserTest do
+defmodule MyApp.Parselet.Components.EmailParserTest do
   use ExUnit.Case
   use ExUnitProperties
 
-  alias MyApp.Datum.Components.EmailParser
+  alias MyApp.Parselet.Components.EmailParser
 
   property "extracts valid email addresses" do
     check all email <- email_gen() do
       text = "Contact: #{email}"
-      result = Datum.parse(text, components: [EmailParser])
+      result = Parselet.parse(text, components: [EmailParser])
       
       assert Map.has_key?(result, :email)
       assert result.email == email
@@ -722,14 +722,14 @@ end
 ### Integration Tests
 
 ```elixir
-defmodule MyApp.Datum.InvoiceParserIntegrationTest do
+defmodule MyApp.Parselet.InvoiceParserIntegrationTest do
   use ExUnit.Case
 
   test "parses complete real-world invoice" do
     invoice_text = File.read!("test/fixtures/invoice.txt")
     
-    result = Datum.parse(invoice_text, components: [
-      MyApp.Datum.Components.InvoiceParser
+    result = Parselet.parse(invoice_text, components: [
+      MyApp.Parselet.Components.InvoiceParser
     ])
     
     assert result.invoice_number == "INV-2026-001"
@@ -762,11 +762,11 @@ Group related fields to reduce parsing passes:
 
 ```elixir
 # ✅ Good: Single parse call
-result = Datum.parse(text, components: [AllParser])
+result = Parselet.parse(text, components: [AllParser])
 
 # ❌ Suboptimal: Multiple parse calls
-result1 = Datum.parse(text, components: [Parser1])
-result2 = Datum.parse(text, components: [Parser2])
+result1 = Parselet.parse(text, components: [Parser1])
+result2 = Parselet.parse(text, components: [Parser2])
 result = Map.merge(result1, result2)
 ```
 
@@ -825,7 +825,7 @@ field :invoice_number,
 # Ensure you have exactly one capture group for :first
 
 # 3. Verify component is included
-result = Datum.parse(text, components: [MyComponent])
+result = Parselet.parse(text, components: [MyComponent])
 IO.inspect(result)
 ```
 
@@ -920,4 +920,3 @@ field :name,
 
 - [API Documentation](API.md)
 - [Main README](README.md)
-- [Examples](lib/my_app/datum/components/)

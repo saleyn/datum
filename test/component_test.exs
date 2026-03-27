@@ -1,9 +1,9 @@
-defmodule Datum.ComponentTest do
+defmodule Parselet.ComponentTest do
   use ExUnit.Case, async: true
 
   describe "basic field definition" do
     defmodule BasicComponent do
-      use Datum.Component
+      use Parselet.Component
 
       field :name, pattern: ~r/Name:\s*(.+)/
       field :age, pattern: ~r/Age:\s*(\d+)/, capture: :first, transform: &String.to_integer/1
@@ -11,7 +11,7 @@ defmodule Datum.ComponentTest do
 
     test "extracts fields using patterns" do
       text = "Name: Alice\nAge: 30"
-      result = Datum.parse(text, components: [BasicComponent])
+      result = Parselet.parse(text, components: [BasicComponent])
 
       assert result.name == "Alice"
       assert result.age == 30
@@ -19,32 +19,32 @@ defmodule Datum.ComponentTest do
 
     test "returns empty map when no fields match" do
       text = "No data here"
-      result = Datum.parse(text, components: [BasicComponent])
+      result = Parselet.parse(text, components: [BasicComponent])
 
       assert result == %{}
     end
 
     test "includes only matched fields" do
       text = "Name: Bob"
-      result = Datum.parse(text, components: [BasicComponent])
+      result = Parselet.parse(text, components: [BasicComponent])
 
       assert Map.has_key?(result, :name)
       refute Map.has_key?(result, :age)
     end
 
-    test "accesses __datum_fields__ function" do
-      fields = BasicComponent.__datum_fields__()
+    test "accesses __parselet_fields__ function" do
+      fields = BasicComponent.__parselet_fields__()
 
       assert Map.has_key?(fields, :name)
       assert Map.has_key?(fields, :age)
-      assert is_struct(fields.name, Datum.Field)
-      assert is_struct(fields.age, Datum.Field)
+      assert is_struct(fields.name, Parselet.Field)
+      assert is_struct(fields.age, Parselet.Field)
     end
   end
 
   describe "pattern variations" do
     defmodule PatternComponent do
-      use Datum.Component
+      use Parselet.Component
 
       field :email, pattern: ~r/Email:\s*(\S+@\S+)/
 
@@ -55,7 +55,7 @@ defmodule Datum.ComponentTest do
 
     test "captures with first modifier" do
       text = "Email: user@example.com"
-      result = Datum.parse(text, components: [PatternComponent])
+      result = Parselet.parse(text, components: [PatternComponent])
 
       assert result.email == "user@example.com"
     end
@@ -65,9 +65,9 @@ defmodule Datum.ComponentTest do
       text2 = "CODE: ABC123"
       text3 = "Code: ABC123"
 
-      result1 = Datum.parse(text1, components: [PatternComponent])
-      result2 = Datum.parse(text2, components: [PatternComponent])
-      result3 = Datum.parse(text3, components: [PatternComponent])
+      result1 = Parselet.parse(text1, components: [PatternComponent])
+      result2 = Parselet.parse(text2, components: [PatternComponent])
+      result3 = Parselet.parse(text3, components: [PatternComponent])
 
       assert result1.code == "ABC123"
       assert result2.code == "ABC123"
@@ -78,8 +78,8 @@ defmodule Datum.ComponentTest do
       text1 = "Value: 100"
       text2 = "Amount: 200"
 
-      result1 = Datum.parse(text1, components: [PatternComponent])
-      result2 = Datum.parse(text2, components: [PatternComponent])
+      result1 = Parselet.parse(text1, components: [PatternComponent])
+      result2 = Parselet.parse(text2, components: [PatternComponent])
 
       assert result1.value == "100"
       assert result2.value == "200"
@@ -88,7 +88,7 @@ defmodule Datum.ComponentTest do
 
   describe "transform functions" do
     defmodule TransformComponent do
-      use Datum.Component
+      use Parselet.Component
 
       field :trimmed,
         pattern: ~r/Name:\s*(.+)/,
@@ -109,21 +109,21 @@ defmodule Datum.ComponentTest do
 
     test "string trim transformation" do
       text = "Name:    Alice    "
-      result = Datum.parse(text, components: [TransformComponent])
+      result = Parselet.parse(text, components: [TransformComponent])
 
       assert result.trimmed == "Alice"
     end
 
     test "uppercase transformation" do
       text = "City: new york"
-      result = Datum.parse(text, components: [TransformComponent])
+      result = Parselet.parse(text, components: [TransformComponent])
 
       assert result.uppercase == "NEW YORK"
     end
 
     test "integer conversion" do
       text = "Count: 42"
-      result = Datum.parse(text, components: [TransformComponent])
+      result = Parselet.parse(text, components: [TransformComponent])
 
       assert result.number == 42
       assert is_integer(result.number)
@@ -131,7 +131,7 @@ defmodule Datum.ComponentTest do
 
     test "currency formatting" do
       text = "Price: $1,234.56"
-      result = Datum.parse(text, components: [TransformComponent])
+      result = Parselet.parse(text, components: [TransformComponent])
 
       assert result.amount == 1234.56
       assert is_float(result.amount)
@@ -140,7 +140,7 @@ defmodule Datum.ComponentTest do
 
   describe "custom function extractors" do
     defmodule FunctionComponent do
-      use Datum.Component
+      use Parselet.Component
 
       field :first_line,
         function: fn text ->
@@ -168,28 +168,28 @@ defmodule Datum.ComponentTest do
 
     test "extracts first line" do
       text = "Line 1\nLine 2\nLine 3"
-      result = Datum.parse(text, components: [FunctionComponent])
+      result = Parselet.parse(text, components: [FunctionComponent])
 
       assert result.first_line == "Line 1"
     end
 
     test "counts lines" do
       text = "Line 1\nLine 2\nLine 3"
-      result = Datum.parse(text, components: [FunctionComponent])
+      result = Parselet.parse(text, components: [FunctionComponent])
 
       assert result.line_count == 3
     end
 
     test "extracts section between delimiters" do
       text = "Header\n---\nMain content\n---\nFooter"
-      result = Datum.parse(text, components: [FunctionComponent])
+      result = Parselet.parse(text, components: [FunctionComponent])
 
       assert result.summary == "Main content"
     end
 
     test "returns nil when delimiter not found" do
       text = "Single line"
-      result = Datum.parse(text, components: [FunctionComponent])
+      result = Parselet.parse(text, components: [FunctionComponent])
 
       assert Map.has_key?(result, :summary) == false
     end
@@ -198,8 +198,8 @@ defmodule Datum.ComponentTest do
       text1 = "Status: ERROR in processing"
       text2 = "Status: OK"
 
-      result1 = Datum.parse(text1, components: [FunctionComponent])
-      result2 = Datum.parse(text2, components: [FunctionComponent])
+      result1 = Parselet.parse(text1, components: [FunctionComponent])
+      result2 = Parselet.parse(text2, components: [FunctionComponent])
 
       assert result1.has_error == true
       assert result2.has_error == false
@@ -208,7 +208,7 @@ defmodule Datum.ComponentTest do
 
   describe "required fields" do
     defmodule StrictComponent do
-      use Datum.Component
+      use Parselet.Component
 
       field :id, pattern: ~r/ID:\s*(\d+)/, required: true
       field :name, pattern: ~r/Name:\s*(.+)/, required: true
@@ -217,7 +217,7 @@ defmodule Datum.ComponentTest do
 
     test "parse with all required fields present" do
       text = "ID: 123\nName: Alice\nEmail: alice@example.com"
-      result = Datum.parse(text, components: [StrictComponent])
+      result = Parselet.parse(text, components: [StrictComponent])
 
       assert result.id == "123"
       assert result.name == "Alice"
@@ -226,7 +226,7 @@ defmodule Datum.ComponentTest do
 
     test "parse with missing required field" do
       text = "ID: 123\nEmail: bob@example.com"
-      result = Datum.parse(text, components: [StrictComponent])
+      result = Parselet.parse(text, components: [StrictComponent])
 
       assert result.id == "123"
       assert result.email == "bob@example.com"
@@ -235,7 +235,7 @@ defmodule Datum.ComponentTest do
 
     test "parse! with all required fields present" do
       text = "ID: 456\nName: Charlie"
-      result = Datum.parse!(text, components: [StrictComponent])
+      result = Parselet.parse!(text, components: [StrictComponent])
 
       assert result.id == "456"
       assert result.name == "Charlie"
@@ -245,7 +245,7 @@ defmodule Datum.ComponentTest do
       text = "ID: 789"
 
       assert_raise ArgumentError, "Missing required fields: [:name]", fn ->
-        Datum.parse!(text, components: [StrictComponent])
+        Parselet.parse!(text, components: [StrictComponent])
       end
     end
 
@@ -253,19 +253,19 @@ defmodule Datum.ComponentTest do
       text = "Email: test@example.com"
 
       assert_raise ArgumentError, fn ->
-        Datum.parse!(text, components: [StrictComponent])
+        Parselet.parse!(text, components: [StrictComponent])
       end
     end
 
     test "required false is default" do
       defmodule OptionalComponent do
-        use Datum.Component
+        use Parselet.Component
 
         field :optional_field, pattern: ~r/Data:\s*(.+)/
       end
 
       text = "No data"
-      result = Datum.parse(text, components: [OptionalComponent])
+      result = Parselet.parse(text, components: [OptionalComponent])
 
       assert result == %{}
     end
@@ -273,14 +273,14 @@ defmodule Datum.ComponentTest do
 
   describe "multiple components" do
     defmodule Component1 do
-      use Datum.Component
+      use Parselet.Component
 
       field :name, pattern: ~r/Name:\s*(.+)/
       field :age, pattern: ~r/Age:\s*(\d+)/, transform: &String.to_integer/1
     end
 
     defmodule Component2 do
-      use Datum.Component
+      use Parselet.Component
 
       field :email, pattern: ~r/Email:\s*(.+)/
       field :phone, pattern: ~r/Phone:\s*(.+)/
@@ -288,7 +288,7 @@ defmodule Datum.ComponentTest do
 
     test "merges results from multiple components" do
       text = "Name: Alice\nAge: 30\nEmail: alice@example.com\nPhone: 555-1234"
-      result = Datum.parse(text, components: [Component1, Component2])
+      result = Parselet.parse(text, components: [Component1, Component2])
 
       assert result.name == "Alice"
       assert result.age == 30
@@ -298,32 +298,32 @@ defmodule Datum.ComponentTest do
 
     test "handles overlapping field names" do
       defmodule ComponentA do
-        use Datum.Component
+        use Parselet.Component
 
         field :id, pattern: ~r/ID:\s*(\d+)/
       end
 
       defmodule ComponentB do
-        use Datum.Component
+        use Parselet.Component
 
         field :id, pattern: ~r/Code:\s*([A-Z]+)/
       end
 
       text = "ID: 123\nCode: ABC"
-      result = Datum.parse(text, components: [ComponentA, ComponentB])
+      result = Parselet.parse(text, components: [ComponentA, ComponentB])
 
       assert result.id == "ABC"
     end
 
     test "parse! checks all components required fields" do
       defmodule StrictA do
-        use Datum.Component
+        use Parselet.Component
 
         field :required_a, pattern: ~r/A:\s*(.+)/, required: true
       end
 
       defmodule StrictB do
-        use Datum.Component
+        use Parselet.Component
 
         field :required_b, pattern: ~r/B:\s*(.+)/, required: true
       end
@@ -331,14 +331,14 @@ defmodule Datum.ComponentTest do
       text = "A: Present"
 
       assert_raise ArgumentError, "Missing required fields: [:required_b]", fn ->
-        Datum.parse!(text, components: [StrictA, StrictB])
+        Parselet.parse!(text, components: [StrictA, StrictB])
       end
     end
   end
 
   describe "edge cases" do
     defmodule EdgeComponent do
-      use Datum.Component
+      use Parselet.Component
 
       field :empty, pattern: ~r/Empty:\s*(.*)/
       field :multiline, function: fn text -> String.split(text, "\n") end
@@ -346,28 +346,28 @@ defmodule Datum.ComponentTest do
 
     test "handles empty captures" do
       text = "Empty: "
-      result = Datum.parse(text, components: [EdgeComponent])
+      result = Parselet.parse(text, components: [EdgeComponent])
 
       assert result.empty == ""
     end
 
     test "handles multiline text in functions" do
       text = "Line 1\nLine 2\nLine 3"
-      result = Datum.parse(text, components: [EdgeComponent])
+      result = Parselet.parse(text, components: [EdgeComponent])
 
       assert result.multiline == ["Line 1", "Line 2", "Line 3"]
     end
 
     test "handles special characters in patterns" do
       defmodule SpecialComponent do
-        use Datum.Component
+        use Parselet.Component
 
         field :path, pattern: ~r/Path:\s*(.+)/
         field :url, pattern: ~r/URL:\s*(.+)/
       end
 
       text = "Path: /home/user/file.txt\nURL: https://example.com?id=123&name=test"
-      result = Datum.parse(text, components: [SpecialComponent])
+      result = Parselet.parse(text, components: [SpecialComponent])
 
       assert result.path == "/home/user/file.txt"
       assert result.url == "https://example.com?id=123&name=test"
@@ -377,12 +377,12 @@ defmodule Datum.ComponentTest do
   describe "field struct properties" do
     test "field struct contains all properties" do
       defmodule TestComponent do
-        use Datum.Component
+        use Parselet.Component
 
         field :test, pattern: ~r/Test:\s*(.+)/, required: true
       end
 
-      fields = TestComponent.__datum_fields__()
+      fields = TestComponent.__parselet_fields__()
       field = fields.test
 
       assert field.name == :test
@@ -394,7 +394,7 @@ defmodule Datum.ComponentTest do
 
     test "field with all options" do
       defmodule FullComponent do
-        use Datum.Component
+        use Parselet.Component
 
         field :complex,
           pattern: ~r/(\d+)-(\d+)/,
@@ -403,7 +403,7 @@ defmodule Datum.ComponentTest do
           required: false
       end
 
-      fields = FullComponent.__datum_fields__()
+      fields = FullComponent.__parselet_fields__()
       field = fields.complex
 
       assert field.capture == :all
@@ -412,12 +412,12 @@ defmodule Datum.ComponentTest do
 
     test "field with function instead of pattern" do
       defmodule FunctionOnlyComponent do
-        use Datum.Component
+        use Parselet.Component
 
         field :computed, function: fn _text -> 42 end
       end
 
-      fields = FunctionOnlyComponent.__datum_fields__()
+      fields = FunctionOnlyComponent.__parselet_fields__()
       field = fields.computed
 
       assert field.function != nil
@@ -427,7 +427,7 @@ defmodule Datum.ComponentTest do
 
   describe "extraction priority" do
     defmodule PriorityComponent do
-      use Datum.Component
+      use Parselet.Component
 
       field :priority,
         pattern: ~r/Pattern:\s*(.+)/,
@@ -436,7 +436,7 @@ defmodule Datum.ComponentTest do
 
     test "function extraction takes priority over pattern" do
       text = "Pattern: from_pattern"
-      result = Datum.parse(text, components: [PriorityComponent])
+      result = Parselet.parse(text, components: [PriorityComponent])
 
       assert result.priority == "function_result"
     end
@@ -444,7 +444,7 @@ defmodule Datum.ComponentTest do
 
   describe "real world scenarios" do
     defmodule InvoiceComponent do
-      use Datum.Component
+      use Parselet.Component
 
       field :invoice_id, pattern: ~r/Invoice #(\d+)/, required: true
 
@@ -463,7 +463,7 @@ defmodule Datum.ComponentTest do
       Total: $1,234.56
       """
 
-      result = Datum.parse!(invoice, components: [InvoiceComponent])
+      result = Parselet.parse!(invoice, components: [InvoiceComponent])
 
       assert result.invoice_id == "12345"
       assert result.amount == 1234.56
@@ -477,7 +477,7 @@ defmodule Datum.ComponentTest do
       """
 
       assert_raise ArgumentError, fn ->
-        Datum.parse!(incomplete, components: [InvoiceComponent])
+        Parselet.parse!(incomplete, components: [InvoiceComponent])
       end
     end
 
@@ -487,7 +487,7 @@ defmodule Datum.ComponentTest do
       Total: $500.00
       """
 
-      result = Datum.parse!(minimal, components: [InvoiceComponent])
+      result = Parselet.parse!(minimal, components: [InvoiceComponent])
 
       assert result.invoice_id == "999"
       assert result.amount == 500.0
@@ -497,7 +497,7 @@ defmodule Datum.ComponentTest do
 
   describe "airbnb reservation component" do
     defmodule AirbnbReservationComponent do
-      use Datum.Component
+      use Parselet.Component
 
       field :reservation_code, pattern: ~r/Reservation code:\s*([A-Z0-9]+)/
       field :guest_name, pattern: ~r/(?:You're hosting|Reservation for)\s+(.+)/
@@ -549,7 +549,7 @@ defmodule Datum.ComponentTest do
       fixture_path = Path.join([__DIR__, "support", "fixtures", "airbnb_reservation_1.txt"])
       text = File.read!(fixture_path)
 
-      result = Datum.parse(text, components: [AirbnbReservationComponent])
+      result = Parselet.parse(text, components: [AirbnbReservationComponent])
 
       assert result.reservation_code == "ABC123XYZ"
       assert result.guest_name == "Kari"
@@ -567,7 +567,7 @@ defmodule Datum.ComponentTest do
       fixture_path = Path.join([__DIR__, "support", "fixtures", "airbnb_reservation_2.txt"])
       text = File.read!(fixture_path)
 
-      result = Datum.parse(text, components: [AirbnbReservationComponent])
+      result = Parselet.parse(text, components: [AirbnbReservationComponent])
 
       assert result.reservation_code == "HMH3HYYX2J"
       assert result.guest_name == "Steven James"

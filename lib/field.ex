@@ -1,13 +1,13 @@
-defmodule Datum.Field do
+defmodule Parselet.Field do
   @moduledoc """
-  Represents a field definition for text extraction in Datum components.
+  Represents a field definition for text extraction in Parselet components.
 
   This module defines the structure and behavior of individual fields that can be
   extracted from text using either regex patterns or custom functions.
   """
 
   @doc """
-  Field definition struct for Datum components.
+  Field definition struct for Parselet components.
 
   ## Fields
 

@@ -1,9 +1,9 @@
-defmodule Datum.MixProject do
+defmodule Parselet.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :datum,
+      app: :parselet,
       version: "0.1.0",
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
@@ -12,13 +12,13 @@ defmodule Datum.MixProject do
       package:       package(),
 
       # Docs
-      name:         "Datum",
+      name:         "Parselet",
       description:  "A declarative text parsing library for Elixir",
-      homepage_url: "http://github.com/saleyn/datum",
+      homepage_url: "http://github.com/saleyn/parselet",
       authors:      ["Serge Aleynikov"],
       docs:         [
-        main:       "Datum.Component", # The main page in the docs
-        extras:     ["README.md"]
+        main: "readme",
+        extras: ["README.md", "API.md", "DEVELOPER_GUIDE.md"],
       ]
     ]
   end
@@ -40,7 +40,7 @@ defmodule Datum.MixProject do
     [
       # These are the default files included in the package
       licenses: ["MIT"],
-      links:    %{"GitHub" => "https://github.com/saleyn/datum"},
+      links:    %{"GitHub" => "https://github.com/saleyn/parselet"},
       files:    ~w(lib mix.exs Makefile *.md test)
     ]
   end

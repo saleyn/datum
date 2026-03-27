@@ -1,4 +1,4 @@
-defmodule Datum.Test do
+defmodule Parselet.Test do
   defmodule Date do
     alias Timex
 
@@ -24,7 +24,7 @@ defmodule Datum.Test do
   end
 
   defmodule Components.AirbnbReservation do
-    use Datum.Component
+    use Parselet.Component
 
     field :reservation_code,
       pattern: ~r/Reservation code[:\s]+([A-Z0-9\-]+)/i,
@@ -38,7 +38,7 @@ defmodule Datum.Test do
     field :date_range,
       pattern: ~r/([A-Za-z]{3} \d{1,2})\s*[–-]\s*([A-Za-z]{3} \d{1,2})/,
       capture: :all,
-      transform: &Datum.Test.Date.normalize_range/1
+      transform: &Parselet.Test.Date.normalize_range/1
 
     field :nights,
       pattern: ~r/(\d+)\s+nights?/i,
@@ -103,7 +103,7 @@ defmodule Datum.Test do
   end
 
   defmodule Parser do
-    use Datum.Parser
+    use Parselet.Parser
 
       @reservation_markers [
       "You’re hosting",
@@ -115,7 +115,7 @@ defmodule Datum.Test do
     def parse(email_text) do
       case classify(email_text) do
         :reservation ->
-          Datum.parse(email_text, components: [AirbnbReservation])
+          Parselet.parse(email_text, components: [AirbnbReservation])
 
         :unknown ->
           {:error, :unknown_airbnb_email_type}

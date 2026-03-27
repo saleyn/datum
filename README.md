@@ -1,4 +1,4 @@
-# Datum
+# Parselet
 
 A declarative text parsing library for Elixir that makes it easy to extract structured data from unstructured text using a simple, composable DSL.
 
@@ -13,12 +13,12 @@ A declarative text parsing library for Elixir that makes it easy to extract stru
 
 ## Installation
 
-Add Datum to your dependencies in `mix.exs`:
+Add Parselet to your dependencies in `mix.exs`:
 
 ```elixir
 def deps do
   [
-    {:datum, path: "."}
+    {:parselet, "~> 0.1"}
   ]
 end
 ```
@@ -29,11 +29,11 @@ Then run `mix deps.get`.
 
 ### 1. Define a Component
 
-Create a module using `Datum.Component` and define fields to extract:
+Create a module using `Parselet.Component` and define fields to extract:
 
 ```elixir
-defmodule MyApp.Datum.Components.EmailParser do
-  use Datum.Component
+defmodule MyApp.Parselet.Components.EmailParser do
+  use Parselet.Component
 
   field :sender,
     pattern: ~r/From:\s*(.+)/,
@@ -52,7 +52,7 @@ end
 
 ### 2. Parse Text
 
-Use `Datum.parse/2` to extract data:
+Use `Parselet.parse/2` to extract data:
 
 ```elixir
 email_text = """
@@ -61,7 +61,7 @@ Subject: Meeting Tomorrow
 Date: 2026-03-27
 """
 
-result = Datum.parse(email_text, components: [MyApp.Datum.Components.EmailParser])
+result = Parselet.parse(email_text, components: [MyApp.Parselet.Components.EmailParser])
 
 # Result:
 # %{
@@ -76,7 +76,7 @@ result = Datum.parse(email_text, components: [MyApp.Datum.Components.EmailParser
 - [API Reference](API.md)
 - [Developer Guide](DEVELOPER_GUIDE.md)
 
-### `Datum.Component`
+### `Parselet.Component`
 
 The main module for defining extraction components.
 
@@ -89,7 +89,7 @@ Define a field to extract from text.
 - `:capture` - How to capture: `:first` (default, returns first capture group) or `:all` (returns all capture groups as a list)
 - `:transform` - Optional function to transform the captured value. Default is identity function (`& &1`).
 - `:function` - Custom extraction function. Takes the full text as input and returns the extracted value. Alternative to `:pattern`.
-- `:required` - Boolean (default `false`). Mark field as required. Use with `Datum.parse!/2` for validation.
+- `:required` - Boolean (default `false`). Mark field as required. Use with `Parselet.parse!/2` for validation.
 
 **Examples:**
 
@@ -125,7 +125,7 @@ field :reservation_code,
   required: true
 ```
 
-### `Datum.parse(text, components: [...])`
+### `Parselet.parse(text, components: [...])`
 
 Parse text using one or more components.
 
@@ -138,11 +138,11 @@ Parse text using one or more components.
 **Example:**
 
 ```elixir
-result = Datum.parse(text, components: [Component1, Component2])
+result = Parselet.parse(text, components: [Component1, Component2])
 # Fields from both components are merged into one map
 ```
 
-### `Datum.parse!(text, components: [...])`
+### `Parselet.parse!(text, components: [...])`
 
 Parse text with validation of required fields.
 
@@ -157,7 +157,7 @@ Parse text with validation of required fields.
 **Example:**
 
 ```elixir
-result = Datum.parse!(text, components: [Component1])
+result = Parselet.parse!(text, components: [Component1])
 # Raises ArgumentError if any fields marked as required: true are not found
 ```
 
@@ -166,8 +166,8 @@ result = Datum.parse!(text, components: [Component1])
 Here's a complete example parsing Airbnb reservation emails:
 
 ```elixir
-defmodule MyApp.Datum.Components.AirbnbReservation do
-  use Datum.Component
+defmodule MyApp.Parselet.Components.AirbnbReservation do
+  use Parselet.Component
 
   # Simple extraction with trimming
   field :reservation_code,
@@ -225,7 +225,7 @@ end
 
 # Usage
 email = File.read!("reservation.txt")
-result = Datum.parse(email, components: [MyApp.Datum.Components.AirbnbReservation])
+result = Parselet.parse(email, components: [MyApp.Parselet.Components.AirbnbReservation])
 
 # Result might be:
 # %{
@@ -288,7 +288,7 @@ field :main_content,
 Fields that don't match simply won't appear in the result map:
 
 ```elixir
-result = Datum.parse(text, components: [MyComponent])
+result = Parselet.parse(text, components: [MyComponent])
 
 # Access with safe defaults
 name = Map.get(result, :name, "Unknown")
@@ -299,10 +299,10 @@ name = Map.get(result, :name, "Unknown")
 Organize related fields into separate components:
 
 ```elixir
-result = Datum.parse(text, components: [
-  MyApp.Datum.Components.Header,
-  MyApp.Datum.Components.Body,
-  MyApp.Datum.Components.Footer
+result = Parselet.parse(text, components: [
+  MyApp.Parselet.Components.Header,
+  MyApp.Parselet.Components.Body,
+  MyApp.Parselet.Components.Footer
 ])
 ```
 
@@ -364,28 +364,28 @@ field :url,
 Example test for a component:
 
 ```elixir
-defmodule MyApp.Datum.Components.EmailParserTest do
+defmodule MyApp.Parselet.Components.EmailParserTest do
   use ExUnit.Case, async: true
 
-  alias MyApp.Datum.Components.EmailParser
+  alias MyApp.Parselet.Components.EmailParser
 
   test "parses email address" do
     text = "From: alice@example.com"
-    result = Datum.parse(text, components: [EmailParser])
+    result = Parselet.parse(text, components: [EmailParser])
 
     assert result.sender == "alice@example.com"
   end
 
   test "returns empty map when no fields match" do
     text = "Invalid content"
-    result = Datum.parse(text, components: [EmailParser])
+    result = Parselet.parse(text, components: [EmailParser])
 
     assert result == %{}
   end
 
   test "includes only matched fields" do
     text = "From: bob@example.com\nSubject: Test"
-    result = Datum.parse(text, components: [EmailParser])
+    result = Parselet.parse(text, components: [EmailParser])
 
     assert Map.has_key?(result, :sender)
     assert Map.has_key?(result, :subject)

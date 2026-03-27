@@ -546,7 +546,7 @@ defmodule Datum.ComponentTest do
     end
 
     test "parses airbnb reservation 1 fixture" do
-      fixture_path = Path.join([__DIR__, "..", "support", "fixtures", "airbnb_reservation_1.txt"])
+      fixture_path = Path.join([__DIR__, "support", "fixtures", "airbnb_reservation_1.txt"])
       text = File.read!(fixture_path)
 
       result = Datum.parse(text, components: [AirbnbReservationComponent])
@@ -564,7 +564,7 @@ defmodule Datum.ComponentTest do
     end
 
     test "parses airbnb reservation 2 fixture" do
-      fixture_path = Path.join([__DIR__, "..", "support", "fixtures", "airbnb_reservation_2.txt"])
+      fixture_path = Path.join([__DIR__, "support", "fixtures", "airbnb_reservation_2.txt"])
       text = File.read!(fixture_path)
 
       result = Datum.parse(text, components: [AirbnbReservationComponent])

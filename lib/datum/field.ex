@@ -1,8 +1,43 @@
 defmodule Datum.Field do
-  @moduledoc false
+  @moduledoc """
+  Represents a field definition for text extraction in Datum components.
 
+  This module defines the structure and behavior of individual fields that can be
+  extracted from text using either regex patterns or custom functions.
+  """
+
+  @doc """
+  Field definition struct for Datum components.
+
+  ## Fields
+
+    * `name` - The name of the field as an atom (e.g., `:email`, `:phone`)
+    * `pattern` - A regex pattern to match against the text. Can be `nil` if using a custom function
+    * `capture` - How to capture matched groups. Either `:first` (default) for the first capture group, or `:all` for all capture groups
+    * `transform` - A function to transform the captured value. Defaults to identity function (`& &1`)
+    * `function` - A custom extraction function that takes the full text and returns the extracted value. Takes precedence over pattern matching
+    * `required` - Whether this field must be present in the parsed result. Defaults to `false`
+  """
   defstruct [:name, :pattern, :capture, :transform, :function, required: false]
 
+  @doc """
+  Creates a new Field struct with the given name and options.
+
+  ## Parameters
+
+    * `name` - The field name as an atom
+    * `opts` - Keyword list of options:
+      * `:pattern` - Regex pattern for extraction
+      * `:capture` - `:first` or `:all` (default: `:first`)
+      * `:transform` - Transform function (default: identity)
+      * `:function` - Custom extraction function
+      * `:required` - Whether field is required (default: `false`)
+
+  ## Examples
+
+      Field.new(:email, pattern: ~r/Email: (.+)/)
+      Field.new(:count, pattern: ~r/Items: (\\d+)/, transform: &String.to_integer/1, required: true)
+  """
   def new(name, opts) do
     %__MODULE__{
       name: name,
@@ -14,6 +49,18 @@ defmodule Datum.Field do
     }
   end
 
+  @doc """
+  Extracts a value from text using the field's pattern or custom function.
+
+  ## Parameters
+
+    * `field` - The Field struct containing extraction logic
+    * `text` - The text to extract from
+
+  ## Returns
+
+  The extracted and transformed value, or `nil` if extraction fails.
+  """
   def extract(%__MODULE__{function: fun}, text) when is_function(fun, 1) do
     fun.(text)
   end
@@ -34,6 +81,18 @@ defmodule Datum.Field do
     end
   end
 
+  @doc """
+  Validates that all required fields are present in the extracted data.
+
+  ## Parameters
+
+    * `fields_map` - Map of extracted field values
+    * `fields_struct_map` - Map of field name to Field struct
+
+  ## Returns
+
+  List of required field names that are missing from the extracted data.
+  """
   def validate_required(fields_map, fields_struct_map) do
     fields_struct_map
     |> Enum.filter(fn {_name, field} -> field.required end)

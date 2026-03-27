@@ -739,6 +739,58 @@ defmodule Parselet.ComponentTest do
       assert merged_result.age == 30
     end
 
+    test "structs: [Component] returns a struct for one component" do
+      defmodule StructComponent do
+        use Parselet.Component
+
+        field :name, pattern: ~r/Name:\s*(.+)/
+        field :age, pattern: ~r/Age:\s*(\d+)/, transform: &String.to_integer/1
+      end
+
+      text = "Name: Alice\nAge: 30"
+      result = Parselet.parse(text, structs: [StructComponent])
+
+      assert result.__struct__ == StructComponent
+      assert result.name == "Alice"
+      assert result.age == 30
+    end
+
+    test "structs: [ComponentA, ComponentB] returns map of structs for multiple components" do
+      defmodule StructComponentA do
+        use Parselet.Component
+
+        field :a, pattern: ~r/A:\s*(\w+)/, capture: :first
+      end
+
+      defmodule StructComponentB do
+        use Parselet.Component
+
+        field :b, pattern: ~r/B:\s*(\w+)/, capture: :first
+      end
+
+      text = "A: one\nB: two"
+      result = Parselet.parse(text, structs: [StructComponentA, StructComponentB])
+
+      assert result[StructComponentA].__struct__ == StructComponentA
+      assert result[StructComponentA].a == "one"
+      assert result[StructComponentB].__struct__ == StructComponentB
+      assert result[StructComponentB].b == "two"
+    end
+
+    test "parse! with structs: [Component] and required field" do
+      defmodule StructRequiredComponent do
+        use Parselet.Component
+
+        field :id, pattern: ~r/ID:\s*(\d+)/, capture: :first, required: true
+      end
+
+      text = "ID: 123"
+      result = Parselet.parse!(text, structs: [StructRequiredComponent])
+
+      assert result.__struct__ == StructRequiredComponent
+      assert result.id == "123"
+    end
+
     test "validates required fields in nested results" do
       defmodule NestedRequiredComponent do
         use Parselet.Component

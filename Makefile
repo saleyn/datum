@@ -1,6 +1,6 @@
 all: compile
 
-compile:
+compile test docs:
 	mix $@
 
 run:
@@ -11,3 +11,5 @@ clean:
 
 publish:
 	mix hex $(if $(replace),publish --replace,cut)
+
+.PHONY: test

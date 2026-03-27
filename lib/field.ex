@@ -18,6 +18,14 @@ defmodule Parselet.Field do
     * `function` - A custom extraction function that takes the full text and returns the extracted value. Takes precedence over pattern matching
     * `required` - Whether this field must be present in the parsed result. Defaults to `false`
   """
+  @type t :: %__MODULE__{
+    name: atom(),
+    pattern: Regex.t() | nil,
+    capture: :first | :all,
+    transform: (any() -> any()),
+    function: ((String.t()) -> any()) | nil,
+    required: boolean()
+  }
   defstruct [:name, :pattern, :capture, :transform, :function, required: false]
 
   @doc """
@@ -94,6 +102,7 @@ defmodule Parselet.Field do
 
   List of required field names that are missing from the extracted data.
   """
+  @spec validate_required(map(), map(), boolean()) :: [atom()]
   def validate_required(fields_map, fields_struct_map, true) do
     fields_struct_map
     |> Enum.filter(fn {_name, field} -> field.required end)
@@ -113,7 +122,12 @@ defmodule Parselet.Field do
   end
 
   # Backward compatibility
+  @spec validate_required(map(), map()) :: [atom()]
   def validate_required(fields_map, fields_struct_map) do
     validate_required(fields_map, fields_struct_map, true)
+  end
+
+  def validate_required(fields_map, fields_struct_map, merge, _structs) do
+    validate_required(fields_map, fields_struct_map, merge)
   end
 end

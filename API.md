@@ -16,26 +16,29 @@ Main entry point for parsing text using Parselet components.
 
 ### Functions
 
-#### `parse(text, components: components_list)`
+#### `parse(text, components: components_list | structs: structs_list)`
 
-Extracts data from text using the specified components.
+Extracts data from text using the specified components, with support for map or struct output.
 
 **Signature:**
 ```elixir
-@spec parse(String.t(), [module()]) :: map()
+@spec parse(String.t(), keyword()) :: map() | struct()
 ```
 
 **Parameters:**
 - `text` (`String.t`) - The text to parse
 - `components: [module]` - List of component modules (created with `use Parselet.Component`)
+- `structs: [module]` - List of component modules to return as struct(s)
+- `merge` (`boolean`, default `true`) - Whether to merge component fields into one map/struct (`false` for nested per-component map/struct)
 
-**Returns:** `map()` - Map containing extracted fields
+**Returns:** `map()` or `struct()` - Parsed result
 
 **Behavior:**
 - Iterates through all components and their defined fields
 - Calls `Parselet.Field.extract/2` for each field
 - Filters out fields that didn't match (nil values)
-- Returns a map combining results from all components
+- With `components`, returns a map of merged values (`merge: true`) or nested component maps (`merge: false`)
+- With `structs`, returns a struct for single component, or map of component module to struct for multiple components, with same merge/non-merge semantics
 
 **Example:**
 
@@ -62,18 +65,20 @@ result = Parselet.parse(text, components: [
 # Fields from both components are merged
 ```
 
-#### `parse!(text, components: components_list)`
+#### `parse!(text, components: components_list | structs: structs_list)`
 
 Extracts data from text with validation of required fields.
 
 **Signature:**
 ```elixir
-@spec parse!(String.t(), [module()]) :: map() | no_return()
+@spec parse!(String.t(), keyword()) :: map() | struct() | no_return()
 ```
 
 **Parameters:**
 - `text` (`String.t`) - The text to parse
 - `components: [module]` - List of component modules
+- `structs: [module]` - List of component modules for struct output
+- `merge` (`boolean`, default `true`) - Whether to merge component fields into one map/struct (`false` for nested per-component map/struct)
 
 **Returns:** `map()` - Map containing extracted fields
 

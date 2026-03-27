@@ -32,7 +32,7 @@ Then run `mix deps.get`.
 Create a module using `Parselet.Component` and define fields to extract:
 
 ```elixir
-defmodule MyApp.Parselet.Components.EmailParser do
+defmodule MyApp.Components.EmailParser do
   use Parselet.Component
 
   field :sender,
@@ -61,7 +61,7 @@ Subject: Meeting Tomorrow
 Date: 2026-03-27
 """
 
-result = Parselet.parse(email_text, components: [MyApp.Parselet.Components.EmailParser])
+result = Parselet.parse(email_text, components: [MyApp.Components.EmailParser])
 
 # Result:
 # %{
@@ -125,30 +125,40 @@ field :reservation_code,
   required: true
 ```
 
-### `Parselet.parse(text, components: [...])`
+### `Parselet.parse(text, components|structs: [...])`
 
 Parse text using one or more components.
 
 **Parameters:**
 - `text` - String to parse
-- `components` - List of component modules to use for extraction
+- `components` or `structs` - List of component modules to use for extraction
 
 **Returns:** Map with extracted fields. Only fields that matched are included.
 
-**Example:**
+**Examples:**
 
 ```elixir
 result = Parselet.parse(text, components: [Component1, Component2])
 # Fields from both components are merged into one map
 ```
 
-### `Parselet.parse!(text, components: [...])`
+```elixir
+# Returns struct(s) when using `structs` option
+result = Parselet.parse(text, structs: [MyApp.Components.EmailParser])
+# => %MyApp.Components.EmailParser{sender: "alice@example.com", subject: "Meeting Tomorrow", date: "2026-03-27"}
+
+# Multiple structs returned as a map when passing more than one module
+result = Parselet.parse(text, structs: [Component1, Component2])
+# => %{Component1 => %Component1{}, Component2 => %Component2{}}
+```
+
+### `Parselet.parse!(text, components|structs: [...])`
 
 Parse text with validation of required fields.
 
 **Parameters:**
 - `text` - String to parse
-- `components` - List of component modules to use for extraction
+- `components` or `structs` - List of component modules to use for extraction
 
 **Returns:** Map with extracted fields (same as `parse/2`)
 
@@ -166,7 +176,7 @@ result = Parselet.parse!(text, components: [Component1])
 Here's a complete example parsing Airbnb reservation emails:
 
 ```elixir
-defmodule MyApp.Parselet.Components.AirbnbReservation do
+defmodule MyApp.Components.AirbnbReservation do
   use Parselet.Component
 
   # Simple extraction with trimming
@@ -225,7 +235,7 @@ end
 
 # Usage
 email = File.read!("reservation.txt")
-result = Parselet.parse(email, components: [MyApp.Parselet.Components.AirbnbReservation])
+result = Parselet.parse(email, components: [MyApp.Components.AirbnbReservation])
 
 # Result might be:
 # %{
@@ -243,7 +253,7 @@ result = Parselet.parse(email, components: [MyApp.Parselet.Components.AirbnbRese
 Parselet shines when you need to extract data from complex documents that contain multiple types of information. Here's an example of processing an invoice that contains both header information and line items:
 
 ```elixir
-defmodule MyApp.Parselet.Components.InvoiceHeader do
+defmodule MyApp.Components.InvoiceHeader do
   use Parselet.Component
 
   field :invoice_number,
@@ -282,7 +292,7 @@ defmodule MyApp.Parselet.Components.InvoiceHeader do
   end
 end
 
-defmodule MyApp.Parselet.Components.InvoiceItems do
+defmodule MyApp.Components.InvoiceItems do
   use Parselet.Component
 
   field :line_items,
@@ -352,8 +362,8 @@ Total: $561.04
 """
 
 result = Parselet.parse(invoice_text, components: [
-  MyApp.Parselet.Components.InvoiceHeader,
-  MyApp.Parselet.Components.InvoiceItems
+  MyApp.Components.InvoiceHeader,
+  MyApp.Components.InvoiceItems
 ])
 
 # Result combines fields from both components:
@@ -443,9 +453,9 @@ Organize related fields into separate components:
 
 ```elixir
 result = Parselet.parse(text, components: [
-  MyApp.Parselet.Components.Header,
-  MyApp.Parselet.Components.Body,
-  MyApp.Parselet.Components.Footer
+  MyApp.Components.Header,
+  MyApp.Components.Body,
+  MyApp.Components.Footer
 ])
 ```
 
@@ -507,10 +517,10 @@ field :url,
 Example test for a component:
 
 ```elixir
-defmodule MyApp.Parselet.Components.EmailParserTest do
+defmodule MyApp.Components.EmailParserTest do
   use ExUnit.Case, async: true
 
-  alias MyApp.Parselet.Components.EmailParser
+  alias MyApp.Components.EmailParser
 
   test "parses email address" do
     text = "From: alice@example.com"

@@ -10,6 +10,6 @@ clean:
 	mix $@
 
 publish:
-	mix hex.$(if $(replace),publish --replace,cut)
+	mix hex.publish$(if $(replace), --replace)
 
 .PHONY: test

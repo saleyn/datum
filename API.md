@@ -177,12 +177,33 @@ field :price,
     |> String.replace(",", "")
     |> String.to_float()
   end
+```
 
-# Mark field as required
-field :account_id,
-  pattern: ~r/ID:\s*([A-Z0-9]+)/,
-  capture: :first,
-  required: true
+#### `preprocess(opts)`
+
+Defines a component-level preprocessing hook that runs once before any field extraction.
+
+**Signature:**
+```elixir
+defmacro preprocess(opts)
+```
+
+**Parameters:**
+- `opts` - either a function or a keyword list such as `function: &String.upcase/1`
+
+**Example:**
+```elixir
+preprocess function: &String.upcase/1
+field :name,
+  pattern: ~r/NAME:\s*(.+)/,
+  capture: :first
+```
+
+```elixir
+preprocess &String.trim/1
+field :email,
+  pattern: ~r/EMAIL:\s*(.+)/,
+  capture: :first
 ```
 
 **Behavior:**

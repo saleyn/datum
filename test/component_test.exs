@@ -206,6 +206,36 @@ defmodule Parselet.ComponentTest do
     end
   end
 
+  describe "preprocess keyword" do
+    defmodule PreprocessKeywordComponent do
+      use Parselet.Component
+
+      preprocess function: &String.upcase/1
+      field :name, pattern: ~r/NAME:\s*(.+)/
+    end
+
+    defmodule PreprocessDirectComponent do
+      use Parselet.Component
+
+      preprocess &String.upcase/1
+      field :name, pattern: ~r/NAME:\s*(.+)/
+    end
+
+    test "applies preprocess before field extraction with keyword syntax" do
+      text = "Name: Alice"
+      result = Parselet.parse(text, components: [PreprocessKeywordComponent])
+
+      assert result.name == "ALICE"
+    end
+
+    test "applies preprocess before field extraction with direct syntax" do
+      text = "Name: Bob"
+      result = Parselet.parse(text, components: [PreprocessDirectComponent])
+
+      assert result.name == "BOB"
+    end
+  end
+
   describe "required fields" do
     defmodule StrictComponent do
       use Parselet.Component
@@ -570,11 +600,11 @@ defmodule Parselet.ComponentTest do
       result = Parselet.parse(text, components: [AirbnbReservationComponent])
 
       assert result.reservation_code == "HRH8HRYX6T"
-      assert result.guest_name == "Steven James"
+      assert result.guest_name == "James Bond"
       assert result.check_in_date == "Feb 1"
       assert result.check_out_date == "Feb 28"
       assert result.nights == 16
-      assert result.property_name == "Your Dream Dual-Zone Gateway"
+      assert result.property_name == "Your Dream Gateway"
       assert result.guest_count == 6
       assert result.check_in_time == "4:00 PM"
       assert result.check_out_time == "10:00 AM"

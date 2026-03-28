@@ -91,6 +91,9 @@ Define a field to extract from text.
 - `:function` - Custom extraction function. Takes the full text as input and returns the extracted value. Alternative to `:pattern`.
 - `:required` - Boolean (default `false`). Mark field as required. Use with `Parselet.parse!/2` for validation.
 
+If a separate component-level macro `preprocess` is defined, its function runs once
+before field extraction.
+
 **Examples:**
 
 ```elixir
@@ -117,6 +120,13 @@ field :listing_name,
     |> String.split("\n")
     |> Enum.find(&String.contains?(&1, ["Apartment", "House"]))
   end
+
+# Preprocess text before extraction
+preprocess function: &String.upcase/1
+
+field :name,
+  pattern: ~r/NAME:\s*(.+)/,
+  capture: :first
 
 # Mark as required
 field :reservation_code,

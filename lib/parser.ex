@@ -193,9 +193,11 @@ defmodule Parselet do
   defp parse_impl_flat(text, components) do
     components
     |> Enum.flat_map(fn component ->
+      component_text = maybe_preprocess(text, component.__parselet_preprocess__())
+
       component.__parselet_fields__()
       |> Enum.map(fn {name, field} ->
-        {name, Parselet.Field.extract(field, text)}
+        {name, Parselet.Field.extract(field, component_text)}
       end)
     end)
     |> Enum.reject(fn {_k, v} -> is_nil(v) end)
@@ -205,9 +207,11 @@ defmodule Parselet do
   defp parselet_nested(text, components) do
     components
     |> Enum.map(fn component ->
+      component_text = maybe_preprocess(text, component.__parselet_preprocess__())
+
       fields = component.__parselet_fields__()
       |> Enum.map(fn {name, field} ->
-        {name, Parselet.Field.extract(field, text)}
+        {name, Parselet.Field.extract(field, component_text)}
       end)
       |> Enum.reject(fn {_k, v} -> is_nil(v) end)
       |> Enum.into(%{})
@@ -216,6 +220,9 @@ defmodule Parselet do
     end)
     |> Enum.into(%{})
   end
+
+  defp maybe_preprocess(text, nil), do: text
+  defp maybe_preprocess(text, function) when is_function(function, 1), do: function.(text)
 
   defp component_to_struct(component, fields) do
     if function_exported?(component, :__struct__, 0) do

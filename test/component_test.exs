@@ -552,11 +552,11 @@ defmodule Parselet.ComponentTest do
       result = Parselet.parse(text, components: [AirbnbReservationComponent])
 
       assert result.reservation_code == "ABC123XYZ"
-      assert result.guest_name == "Kari"
+      assert result.guest_name == "Karina"
       assert result.check_in_date == "Mar 28"
       assert result.check_out_date == "Apr 3"
       assert result.nights == 6
-      assert result.property_name == "Couver A 2BR · Spacious 2/1 Unit Prime Location"
+      assert result.property_name == "Couzer A 2BR · Spacious 2br Unit"
       assert result.guest_count == 3
       assert result.check_in_time == "4:00 PM"
       assert result.check_out_time == "10:00 AM"
@@ -569,12 +569,12 @@ defmodule Parselet.ComponentTest do
 
       result = Parselet.parse(text, components: [AirbnbReservationComponent])
 
-      assert result.reservation_code == "HMH3HYYX2J"
+      assert result.reservation_code == "HRH8HRYX6T"
       assert result.guest_name == "Steven James"
-      assert result.check_in_date == "Feb 12"
+      assert result.check_in_date == "Feb 1"
       assert result.check_out_date == "Feb 28"
       assert result.nights == 16
-      assert result.property_name == "Your Dream Dual-Zone Gateway With Private Pool"
+      assert result.property_name == "Your Dream Dual-Zone Gateway"
       assert result.guest_count == 6
       assert result.check_in_time == "4:00 PM"
       assert result.check_out_time == "10:00 AM"

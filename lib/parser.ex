@@ -3,7 +3,7 @@ defmodule Parselet do
   Main entry point for parsing text using Parselet components.
   """
 
-  @spec parse(String.t(), keyword()) :: map() | struct()
+  @spec parse(String.t(), keyword()) :: map() | struct() | {:error, %{reason: String.t(), fields: [atom()]}}
   @doc """
   Parses text using the provided components and extracts fields based on their patterns.
 
@@ -27,6 +27,9 @@ defmodule Parselet do
   - With `structs:`: a map where each key is a component module and each value is a struct instance of that component
 
   Only fields that successfully match their patterns will be included. Fields with `nil` values are excluded.
+
+  If required fields are missing or a component `postprocess` hook returns an error, the function returns:
+  `{:error, %{reason: String.t(), fields: [atom()]}}`
 
   ## Examples
 
@@ -70,7 +73,22 @@ defmodule Parselet do
       end
 
     merge = Keyword.get(opts, :merge, true)
-    parse_impl(text, components, merge, structs_flag)
+
+    case parse_impl(text, components, merge, structs_flag) do
+      {:error, _} = err -> err
+      result ->
+        all_fields =
+          components
+          |> Enum.flat_map(fn component ->
+            component.__parselet_fields__()
+          end)
+          |> Enum.into(%{})
+
+        case Parselet.Field.validate_required(result, all_fields, merge, structs_flag) do
+          [] -> result
+          missing -> {:error, %{reason: "Missing required fields", fields: missing}}
+        end
+    end
   end
 
 
@@ -100,7 +118,7 @@ defmodule Parselet do
   - With `components:`: a map where each key is a component module and each value is a map of that component's extracted fields
   - With `structs:`: a map where each key is a component module and each value is a struct instance of that component
 
-  Raises `ArgumentError` if any required fields are missing.
+  Raises `ArgumentError` if any required fields are missing or if a component `postprocess` hook returns an error.
 
   ## Examples
 
@@ -123,67 +141,52 @@ defmodule Parselet do
   """
   @spec parse!(String.t(), keyword()) :: map() | struct()
   def parse!(text, opts) do
-    {components, structs_flag} =
-      case {Keyword.get(opts, :components), Keyword.get(opts, :structs)} do
-        {nil, nil} ->
-          raise ArgumentError, "must pass either :components or :structs"
+    case parse(text, opts) do
+      {:error, %{reason: reason, fields: fields}} ->
+        raise ArgumentError, "#{reason}: #{inspect(fields)}"
 
-        {comps, nil} when is_list(comps) ->
-          {comps, false}
+      {:error, %{reason: reason}} ->
+        raise ArgumentError, reason
 
-        {_, structs} when is_list(structs) ->
-          {structs, true}
-
-        {comps, true} when is_list(comps) ->
-          {comps, true}
-
-        {comps, false} when is_list(comps) ->
-          {comps, false}
-
-        {_, _} ->
-          raise ArgumentError, ":components must be a list or :structs must be a list"
-      end
-
-    merge = Keyword.get(opts, :merge, true)
-    result = parse_impl(text, components, merge, structs_flag)
-
-    all_fields =
-      components
-      |> Enum.flat_map(fn component ->
-        component.__parselet_fields__()
-      end)
-      |> Enum.into(%{})
-
-    case Parselet.Field.validate_required(result, all_fields, merge, structs_flag) do
-      [] -> result
-      missing -> raise ArgumentError, "Missing required fields: #{inspect(missing)}"
+      result ->
+        result
     end
   end
 
   defp parse_impl(text, components, merge, structs) do
     case {merge, structs, components} do
       {true, true, [component]} ->
-        component_fields = parse_impl_flat(text, [component])
-        component_to_struct(component, component_fields)
+        case parse_impl_flat(text, [component]) do
+          {:error, _} = err -> err
+          component_fields -> component_to_struct(component, component_fields)
+        end
 
       {_, true, components} when components != [] ->
         components
-        |> Enum.map(fn component ->
-          fields = parse_impl_flat(text, [component])
-          {component, component_to_struct(component, fields)}
+        |> Enum.reduce_while(%{}, fn component, acc ->
+          case parse_impl_flat(text, [component]) do
+            {:error, _} = err ->
+              {:halt, err}
+
+            fields ->
+              {:cont, Map.put(acc, component, component_to_struct(component, fields))}
+          end
         end)
-        |> Enum.into(%{})
 
       {true, false, _components} ->
         parse_impl_flat(text, components)
 
       {false, true, components} ->
         components
-        |> Enum.map(fn component ->
-          fields = parse_impl_flat(text, [component])
-          {component, component_to_struct(component, fields)}
+        |> Enum.reduce_while(%{}, fn component, acc ->
+          case parse_impl_flat(text, [component]) do
+            {:error, _} = err ->
+              {:halt, err}
+
+            fields ->
+              {:cont, Map.put(acc, component, component_to_struct(component, fields))}
+          end
         end)
-        |> Enum.into(%{})
 
       {false, false, _components} ->
         parselet_nested(text, components)
@@ -192,37 +195,68 @@ defmodule Parselet do
 
   defp parse_impl_flat(text, components) do
     components
-    |> Enum.flat_map(fn component ->
+    |> Enum.reduce_while(%{}, fn component, acc ->
       component_text = maybe_preprocess(text, component.__parselet_preprocess__())
 
-      component.__parselet_fields__()
-      |> Enum.map(fn {name, field} ->
-        {name, Parselet.Field.extract(field, component_text)}
-      end)
+      case component.__parselet_fields__()
+           |> Enum.map(fn {name, field} ->
+             {name, Parselet.Field.extract(field, component_text)}
+           end)
+           |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+           |> Enum.into(%{})
+           |> maybe_postprocess(component) do
+        {:error, _} = err ->
+          {:halt, err}
+
+        fields ->
+          {:cont, Map.merge(acc, fields)}
+      end
     end)
-    |> Enum.reject(fn {_k, v} -> is_nil(v) end)
-    |> Enum.into(%{})
   end
 
   defp parselet_nested(text, components) do
     components
-    |> Enum.map(fn component ->
+    |> Enum.reduce_while(%{}, fn component, acc ->
       component_text = maybe_preprocess(text, component.__parselet_preprocess__())
 
-      fields = component.__parselet_fields__()
-      |> Enum.map(fn {name, field} ->
-        {name, Parselet.Field.extract(field, component_text)}
-      end)
-      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
-      |> Enum.into(%{})
+      case component.__parselet_fields__()
+           |> Enum.map(fn {name, field} ->
+             {name, Parselet.Field.extract(field, component_text)}
+           end)
+           |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+           |> Enum.into(%{})
+           |> maybe_postprocess(component) do
+        {:error, _} = err ->
+          {:halt, err}
 
-      {component, fields}
+        fields ->
+          {:cont, Map.put(acc, component, fields)}
+      end
     end)
-    |> Enum.into(%{})
   end
 
   defp maybe_preprocess(text, nil), do: text
   defp maybe_preprocess(text, function) when is_function(function, 1), do: function.(text)
+
+  defp maybe_postprocess(fields, component) do
+    case component.__parselet_postprocess__() do
+      nil -> fields
+      function when is_function(function, 1) ->
+        case function.(fields) do
+          :ok -> fields
+          map when is_map(map) -> Map.merge(fields, map)
+          {:error, %{reason: reason, fields: fields}} when is_binary(reason) and is_list(fields) ->
+            {:error, %{reason: reason, fields: fields}}
+          {:error, reason} when is_binary(reason) ->
+            {:error, %{reason: reason, fields: []}}
+          {:error, reason} ->
+            {:error, %{reason: inspect(reason), fields: []}}
+          other ->
+            raise ArgumentError,
+                  "postprocess must return :ok, map, or {:error, reason}, got: #{inspect(other)}"
+        end
+    end
+  end
 
   defp component_to_struct(component, fields) do
     if function_exported?(component, :__struct__, 0) do

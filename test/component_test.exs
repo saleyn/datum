@@ -40,6 +40,40 @@ defmodule Parselet.ComponentTest do
       assert is_struct(fields.name, Parselet.Field)
       assert is_struct(fields.age, Parselet.Field)
     end
+
+    defmodule ParseHelperStrictComponent do
+      use Parselet.Component
+
+      field :id, pattern: ~r/ID:\s*(\d+)/, required: true
+    end
+
+    test "component module parse/2 returns struct-like result" do
+      text = "Name: Alice\nAge: 30"
+      result = BasicComponent.parse(text)
+
+      assert result.__struct__ == BasicComponent
+      assert result.name == "Alice"
+      assert result.age == 30
+    end
+
+    test "component module parse/2 returns error tuple on missing required fields" do
+      result = ParseHelperStrictComponent.parse("Name: Alice")
+
+      assert result == {:error, %{reason: "Missing required fields", fields: [:id]}}
+    end
+
+    test "component module parse!/2 raises on missing required fields" do
+      assert_raise ArgumentError, fn ->
+        ParseHelperStrictComponent.parse!("Name: Alice")
+      end
+    end
+
+    test "component module parse!/2 returns struct on valid input" do
+      result = ParseHelperStrictComponent.parse!("ID: 123")
+
+      assert result.__struct__ == ParseHelperStrictComponent
+      assert result.id == "123"
+    end
   end
 
   describe "pattern variations" do
@@ -206,14 +240,7 @@ defmodule Parselet.ComponentTest do
     end
   end
 
-  describe "preprocess keyword" do
-    defmodule PreprocessKeywordComponent do
-      use Parselet.Component
-
-      preprocess function: &String.upcase/1
-      field :name, pattern: ~r/NAME:\s*(.+)/
-    end
-
+  describe "preprocess" do
     defmodule PreprocessDirectComponent do
       use Parselet.Component
 
@@ -221,11 +248,14 @@ defmodule Parselet.ComponentTest do
       field :name, pattern: ~r/NAME:\s*(.+)/
     end
 
-    test "applies preprocess before field extraction with keyword syntax" do
-      text = "Name: Alice"
-      result = Parselet.parse(text, components: [PreprocessKeywordComponent])
+    defmodule PreprocessInlineComponent do
+      use Parselet.Component
 
-      assert result.name == "ALICE"
+      preprocess fn text ->
+        String.upcase(text)
+      end
+
+      field :name, pattern: ~r/NAME:\s*(.+)/
     end
 
     test "applies preprocess before field extraction with direct syntax" do
@@ -233,6 +263,152 @@ defmodule Parselet.ComponentTest do
       result = Parselet.parse(text, components: [PreprocessDirectComponent])
 
       assert result.name == "BOB"
+    end
+
+    test "applies preprocess before field extraction with inline function syntax" do
+      text = "Name: Carol"
+      result = Parselet.parse(text, components: [PreprocessInlineComponent])
+
+      assert result.name == "CAROL"
+    end
+
+    test "preprocess keyword syntax is rejected at compile time" do
+      assert_raise ArgumentError, ~r/preprocess keyword syntax is no longer supported/, fn ->
+        Code.compile_string(~S"
+        defmodule PreprocessKeywordRejectComponent do
+          use Parselet.Component
+
+          preprocess function: &String.upcase/1
+          field :name, pattern: ~r/NAME:\s*(.+)/
+        end
+        ")
+      end
+    end
+  end
+
+  describe "postprocess functions" do
+    defmodule PostprocessMapComponent do
+      use Parselet.Component
+
+      field :first_name, pattern: ~r/First:\s*(\w+)/, capture: :first
+      field :last_name, pattern: ~r/Last:\s*(\w+)/, capture: :first
+
+      postprocess fn fields ->
+        case Map.take(fields, [:first_name, :last_name]) do
+          %{first_name: first, last_name: last} -> %{full_name: "#{first} #{last}"}
+          _ -> :ok
+        end
+      end
+    end
+
+    defmodule PostprocessOkComponent do
+      use Parselet.Component
+
+      field :code, pattern: ~r/Code:\s*(\w+)/, capture: :first
+
+      postprocess fn _fields ->
+        :ok
+      end
+    end
+
+    defmodule PostprocessKeywordComponent do
+      use Parselet.Component
+
+      field :code, pattern: ~r/Code:\s*(\w+)/, capture: :first
+
+      postprocess function: fn _fields -> %{parsed_at: "now"} end
+    end
+
+    test "merges additional values returned by postprocess" do
+      text = "First: Alice\nLast: Smith"
+      result = Parselet.parse(text, components: [PostprocessMapComponent])
+
+      assert result.first_name == "Alice"
+      assert result.last_name == "Smith"
+      assert result.full_name == "Alice Smith"
+    end
+
+    test "leaves parsed values unchanged when postprocess returns :ok" do
+      text = "Code: AZ1"
+      result = Parselet.parse(text, components: [PostprocessOkComponent])
+
+      assert result.code == "AZ1"
+      assert Map.keys(result) == [:code]
+    end
+
+    defmodule PostprocessErrorComponent do
+      use Parselet.Component
+
+      field :status, pattern: ~r/Status:\s*(\w+)/, capture: :first
+
+      postprocess fn _fields ->
+        {:error, "invalid status"}
+      end
+    end
+
+    defmodule PostprocessErrorFieldsComponent do
+      use Parselet.Component
+
+      field :status, pattern: ~r/Status:\s*(\w+)/, capture: :first
+
+      postprocess fn _fields ->
+        {:error, %{reason: "status invalid", fields: [:status]}}
+      end
+    end
+
+    defmodule PostprocessNonStringReasonComponent do
+      use Parselet.Component
+
+      field :status, pattern: ~r/Status:\s*(\w+)/, capture: :first
+
+      postprocess fn _fields ->
+        {:error, :bad_reason}
+      end
+    end
+
+    test "returns error tuple when postprocess returns {:error, reason}" do
+      text = "Status: OK"
+      assert Parselet.parse(text, components: [PostprocessErrorComponent]) ==
+               {:error, %{reason: "invalid status", fields: []}}
+    end
+
+    test "returns error tuple when postprocess returns {:error, %{reason, fields}}" do
+      text = "Status: OK"
+      assert Parselet.parse(text, components: [PostprocessErrorFieldsComponent]) ==
+               {:error, %{reason: "status invalid", fields: [:status]}}
+
+      assert_raise ArgumentError, "status invalid: [:status]", fn ->
+        Parselet.parse!(text, components: [PostprocessErrorFieldsComponent])
+      end
+    end
+
+    test "returns error tuple when postprocess returns {:error, non-string reason}" do
+      text = "Status: OK"
+
+      assert Parselet.parse(text, components: [PostprocessNonStringReasonComponent]) ==
+               {:error, %{reason: ":bad_reason", fields: []}}
+    end
+
+    test "returns error tuple when postprocess fails for structs" do
+      text = "Status: OK"
+
+      assert Parselet.parse(text, structs: [PostprocessErrorComponent]) ==
+               {:error, %{reason: "invalid status", fields: []}}
+    end
+
+    test "returns error tuple when postprocess fails inside multiple structs" do
+      text = "First: Alice\nLast: Smith\nStatus: OK"
+
+      assert Parselet.parse(text, structs: [PostprocessMapComponent, PostprocessErrorComponent]) ==
+               {:error, %{reason: "invalid status", fields: []}}
+    end
+
+    test "postprocess keyword syntax works with function option" do
+      text = "Code: AZ1"
+      result = Parselet.parse(text, components: [PostprocessKeywordComponent])
+
+      assert result.code == "AZ1"
+      assert result.parsed_at == "now"
     end
   end
 
@@ -254,13 +430,11 @@ defmodule Parselet.ComponentTest do
       assert result.email == "alice@example.com"
     end
 
-    test "parse with missing required field" do
+    test "returns error tuple when required field is missing" do
       text = "ID: 123\nEmail: bob@example.com"
-      result = Parselet.parse(text, components: [StrictComponent])
 
-      assert result.id == "123"
-      assert result.email == "bob@example.com"
-      assert !Map.has_key?(result, :name)
+      assert Parselet.parse(text, components: [StrictComponent]) ==
+               {:error, %{reason: "Missing required fields", fields: [:name]}}
     end
 
     test "parse! with all required fields present" do
@@ -452,6 +626,34 @@ defmodule Parselet.ComponentTest do
 
       assert field.function != nil
       assert field.pattern == nil
+    end
+
+    test "field extract returns nil when no pattern or function is specified" do
+      field = Parselet.Field.new(:missing, [])
+      assert Parselet.Field.extract(field, "text") == nil
+    end
+
+    test "field extract supports capture :all and fallback nil" do
+      field = Parselet.Field.new(:date, pattern: ~r/(\d{4})-(\d{2})-(\d{2})/, capture: :all)
+      assert Parselet.Field.extract(field, "2026-03-29") == ["2026", "03", "29"]
+      assert Parselet.Field.extract(field, "no-match") == nil
+    end
+
+    test "validate_required/4 handles merge false nested results" do
+      fields_map = %{StructComponent => %{a: "1"}}
+      field_structs = %{
+        a: Parselet.Field.new(:a, required: true),
+        b: Parselet.Field.new(:b, required: true)
+      }
+
+      assert Parselet.Field.validate_required(fields_map, field_structs, false) == [:b]
+    end
+
+    test "validate_required/2 uses merged validation" do
+      fields_map = %{a: 1}
+      field_structs = %{a: Parselet.Field.new(:a, required: true)}
+
+      assert Parselet.Field.validate_required(fields_map, field_structs) == []
     end
   end
 
@@ -805,6 +1007,68 @@ defmodule Parselet.ComponentTest do
       assert result[StructComponentA].a == "one"
       assert result[StructComponentB].__struct__ == StructComponentB
       assert result[StructComponentB].b == "two"
+    end
+
+    test "parse/2 with structs and merge: false returns nested struct map" do
+      text = "Name: John Doe\nAge: 35\nEmail: john.doe@example.com\nStreet: 123 Main St\nCity: Anytown\nZIP: 12345"
+
+      result = Parselet.parse(text, structs: [PersonalInfoComponent, AddressComponent], merge: false)
+
+      assert result[PersonalInfoComponent].__struct__ == PersonalInfoComponent
+      assert result[AddressComponent].__struct__ == AddressComponent
+      assert result[PersonalInfoComponent].name == "John Doe"
+      assert result[AddressComponent].street == "123 Main St"
+    end
+
+    test "parse/2 with components and merge: false returns an error for failing nested postprocess" do
+      defmodule NestedFailComponent do
+        use Parselet.Component
+
+        field :status, pattern: ~r/Status:\s*(\w+)/, capture: :first
+        postprocess fn _fields -> {:error, :bad_end} end
+      end
+
+      defmodule GoodMergeComponent do
+        use Parselet.Component
+
+        field :name, pattern: ~r/Name:\s*(.+)/
+      end
+
+      text = "Name: Alice\nStatus: OK"
+      assert Parselet.parse(text, components: [GoodMergeComponent, NestedFailComponent], merge: false) ==
+               {:error, %{reason: ":bad_end", fields: []}}
+    end
+
+    test "parse/2 with components and structs: true returns a struct" do
+      text = "Name: John Doe\nAge: 35\nEmail: john.doe@example.com"
+      result = Parselet.parse(text, components: [PersonalInfoComponent], structs: true)
+
+      assert result.__struct__ == PersonalInfoComponent
+      assert result.name == "John Doe"
+      assert result.age == 35
+      assert result.email == "john.doe@example.com"
+    end
+
+    test "parse/2 with components and structs: false returns a merged map" do
+      text = "Name: John Doe\nAge: 35\nEmail: john.doe@example.com"
+      result = Parselet.parse(text, components: [PersonalInfoComponent], structs: false)
+
+      assert result.name == "John Doe"
+      assert result.age == 35
+      assert result.email == "john.doe@example.com"
+      refute Map.has_key?(result, :__struct__)
+    end
+
+    test "parse/2 raises when no components or structs are provided" do
+      assert_raise ArgumentError, "must pass either :components or :structs", fn ->
+        Parselet.parse("text", [])
+      end
+    end
+
+    test "parse/2 raises when invalid options are provided" do
+      assert_raise ArgumentError, ":components must be a list or :structs must be a list", fn ->
+        Parselet.parse("text", components: :invalid)
+      end
     end
 
     test "parse! with structs: [Component] and required field" do

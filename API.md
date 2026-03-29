@@ -22,7 +22,7 @@ Extracts data from text using the specified components, with support for map or 
 
 **Signature:**
 ```elixir
-@spec parse(String.t(), keyword()) :: map() | struct()
+@spec parse(String.t(), keyword()) :: map() | struct() | {:error, %{reason: String.t(), fields: [atom()]}}
 ```
 
 **Parameters:**
@@ -32,6 +32,12 @@ Extracts data from text using the specified components, with support for map or 
 - `merge` (`boolean`, default `true`) - Whether to merge component fields into one map/struct (`false` for nested per-component map/struct)
 
 **Returns:** `map()` or `struct()` - Parsed result
+
+When required fields are missing or a component `postprocess` hook returns an error, `Parselet.parse/2` returns:
+
+```elixir
+{:error, %{reason: "...", fields: [:missing_field]}}
+```
 
 **Behavior:**
 - Iterates through all components and their defined fields
@@ -80,9 +86,9 @@ Extracts data from text with validation of required fields.
 - `structs: [module]` - List of component modules for struct output
 - `merge` (`boolean`, default `true`) - Whether to merge component fields into one map/struct (`false` for nested per-component map/struct)
 
-**Returns:** `map()` - Map containing extracted fields
+**Returns:** `map()` or `struct()` - Parsed result
 
-**Raises:** `ArgumentError` - If any required fields are missing
+**Raises:** `ArgumentError` - If required fields are missing or a component `postprocess` hook returns an error
 
 **Example:**
 
@@ -111,6 +117,9 @@ Parselet.parse!(text, components: [MyParser])
 ## Module: `Parselet.Component`
 
 DSL for defining text extraction components.
+
+Each component module also receives generated `parse/2` and `parse!/2`
+convenience helpers that invoke `Parselet.parse(text, structs: [Component])`.
 
 ### Macros
 
@@ -189,11 +198,13 @@ defmacro preprocess(opts)
 ```
 
 **Parameters:**
-- `opts` - either a function or a keyword list such as `function: &String.upcase/1`
+- `opts` - either a function, a function capture, or a keyword list such as `function: &String.upcase/1`
 
-**Example:**
+**Examples:**
 ```elixir
-preprocess function: &String.upcase/1
+preprocess fn text ->
+  String.upcase(text)
+end
 field :name,
   pattern: ~r/NAME:\s*(.+)/,
   capture: :first
@@ -205,6 +216,48 @@ field :email,
   pattern: ~r/EMAIL:\s*(.+)/,
   capture: :first
 ```
+
+```elixir
+preprocess fn text ->
+  String.upcase(text)
+end
+field :email,
+  pattern: ~r/EMAIL:\s*(.+)/,
+  capture: :first
+```
+
+#### `postprocess(opts)`
+
+Defines a component-level postprocessing hook that runs once after all fields have been extracted.
+
+**Signature:**
+```elixir
+defmacro postprocess(opts)
+```
+
+**Parameters:**
+- `opts` - either a function, a function capture, or a keyword list such as `function: &add_metadata/1`
+
+**Example:**
+```elixir
+postprocess fn fields ->
+  if Map.has_key?(fields, :name) do
+    %{display_name: "#{fields.first_name} #{fields.last_name}"}
+  else
+    :ok
+  end
+end
+```
+
+**Behavior:**
+- When the hook returns `:ok`, the parsed field map is left unchanged
+- When the hook returns a map, its values are merged into the parsed result
+- When the hook returns `{:error, reason}`, `Parselet.parse/2` returns `{:error, %{reason: reason, fields: []}}`
+- When the hook returns `{:error, %{reason: reason, fields: fields}}`, `Parselet.parse/2` returns that error tuple
+- The hook receives the map of extracted fields after field parsing completes
+
+**Notes:**
+- `postprocess` errors are propagated by `Parselet.parse/2` and raised by `Parselet.parse!/2`
 
 **Behavior:**
 - Compile-time macro that registers field definitions

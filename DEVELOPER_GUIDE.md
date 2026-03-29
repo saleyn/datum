@@ -8,13 +8,14 @@ This guide is for developers who want to create custom components using the Pars
 
 1. [Creating Your First Component](#creating-your-first-component)
 2. [Field Definition Patterns](#field-definition-patterns)
-3. [Regex Patterns Guide](#regex-patterns-guide)
-4. [Transform Functions](#transform-functions)
-5. [Required Fields](#required-fields)
-6. [Advanced Techniques](#advanced-techniques)
-7. [Testing Components](#testing-components)
-8. [Performance Optimization](#performance-optimization)
-9. [Troubleshooting](#troubleshooting)
+3. [Component-Level Functions](#component-level-functions)
+4. [Regex Patterns Guide](#regex-patterns-guide)
+5. [Transform Functions](#transform-functions)
+6. [Required Fields](#required-fields)
+7. [Advanced Techniques](#advanced-techniques)
+8. [Testing Components](#testing-components)
+9. [Performance Optimization](#performance-optimization)
+10. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -202,6 +203,49 @@ field :tags,
     end
   end
 ```
+
+---
+
+## Component-Level Functions
+
+### Preprocess
+
+Define a component-level preprocessing hook with `preprocess/1` to normalize the raw text before field extraction begins.
+
+```elixir
+preprocess fn text ->
+  text
+  |> String.replace("\r\n", "\n")
+  |> String.trim()
+end
+```
+
+You can also pass the function directly:
+
+```elixir
+preprocess &String.trim/1
+```
+
+The returned text is used for all downstream field extraction in that component.
+
+### Postprocess
+
+Define a component-level postprocessing hook with `postprocess/1` to run after all fields are parsed.
+
+```elixir
+postprocess fn result ->
+  result
+  |> Map.put(:parsed_at, DateTime.utc_now())
+end
+```
+
+You can also pass the function directly:
+
+```elixir
+postprocess &add_metadata/1
+```
+
+The callback receives the parsed field map and must return either `:ok` or a map. When it returns a map, the map is merged into the parsed result.
 
 ---
 

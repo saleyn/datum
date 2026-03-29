@@ -92,7 +92,11 @@ Define a field to extract from text.
 - `:required` - Boolean (default `false`). Mark field as required. Use with `Parselet.parse!/2` for validation.
 
 If a separate component-level macro `preprocess` is defined, its function runs once
-before field extraction.
+before field extraction. A component may also define `postprocess`, which runs
+once after field extraction and may merge additional values into the parsed map.
+
+Each component module also gets `parse/2` and `parse!/2` convenience helpers
+that call `Parselet.parse(text, structs: [Component])`.
 
 **Examples:**
 
@@ -122,11 +126,22 @@ field :listing_name,
   end
 
 # Preprocess text before extraction
-preprocess function: &String.upcase/1
+preprocess fn text ->
+  String.upcase(text)
+end
 
 field :name,
   pattern: ~r/NAME:\s*(.+)/,
   capture: :first
+
+# Postprocess parsed values
+postprocess fn fields ->
+  if Map.has_key?(fields, :name) do
+    %{name: String.downcase(fields.name), parsed_at: DateTime.utc_now()}
+  else
+    :ok
+  end
+end
 
 # Mark as required
 field :reservation_code,
@@ -144,6 +159,12 @@ Parse text using one or more components.
 - `components` or `structs` - List of component modules to use for extraction
 
 **Returns:** Map with extracted fields. Only fields that matched are included.
+
+When required fields are missing or component postprocessing fails, `Parselet.parse/2` returns an error tuple:
+
+```elixir
+{:error, %{reason: "Missing required fields", fields: [:field_name]}}
+```
 
 **Examples:**
 
@@ -605,4 +626,4 @@ field :date,
 
 ## License
 
-This project is part of MyApp.
+This project is released under MIT License.

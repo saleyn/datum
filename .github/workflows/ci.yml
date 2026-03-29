@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        elixir: ["1.15", "1.16", "1.17"]
+        otp: ["26.3", "27.0"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Elixir
+        uses: erlef/setup-elixir@v1
+        with:
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+
+      - name: Install Hex and Rebar
+        run: |
+          mix local.hex --force
+          mix local.rebar --force
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Run tests and enforce coverage threshold
+        run: |
+          set -e
+          mix test --cover | tee coverage.txt
+          total=$(grep -E '[0-9]+\.[0-9]+% \| Total$' coverage.txt | awk '{print $1}' | tr -d '%')
+          if [ -z "$total" ]; then
+            echo "Unable to determine total coverage."
+            exit 1
+          fi
+          echo "Total coverage: ${total}%"
+          awk -v cov="$total" 'BEGIN { if (cov < 90.0) { printf "Coverage %s%% is below threshold 90.0%%\n", cov; exit 1 } }'

@@ -101,6 +101,9 @@ that call `Parselet.parse(text, structs: [Component])`.
 **Examples:**
 
 ```elixir
+# Preprocess text before extraction
+preprocess &String.upcase/1
+
 # Simple pattern matching
 field :email,
   pattern: ~r/Email:\s*(\S+@\S+)/,
@@ -124,11 +127,6 @@ field :listing_name,
     |> String.split("\n")
     |> Enum.find(&String.contains?(&1, ["Apartment", "House"]))
   end
-
-# Preprocess text before extraction
-preprocess fn text ->
-  String.upcase(text)
-end
 
 field :name,
   pattern: ~r/NAME:\s*(.+)/,

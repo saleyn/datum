@@ -40,9 +40,11 @@ jobs:
         run: |
           set -e
           mix test --cover | tee coverage.txt
-          total=$(grep -E '[0-9]+\.[0-9]+% \| Total$' coverage.txt | awk '{print $1}' | tr -d '%')
+          total=$(grep -E 'Total' coverage.txt | tail -n 1 | sed -E 's/.*([0-9]+(\.[0-9]+)?)%.*/\1/')
           if [ -z "$total" ]; then
             echo "Unable to determine total coverage."
+            echo "Coverage output:"
+            cat coverage.txt
             exit 1
           fi
           echo "Total coverage: ${total}%"
